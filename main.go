@@ -1,10 +1,10 @@
 package main
 
 import (
+	"IAMbyGo/repo"
+	"IAMbyGo/service"
 	"database/sql"
 	"fmt"
-	"helloworld/repo"
-	"helloworld/service"
 	"log"
 	"net/http"
 
@@ -12,6 +12,7 @@ import (
 )
 
 var userService service.User
+var authService service.Auth
 
 func main() {
 	fmt.Println("Server started....")
@@ -22,6 +23,7 @@ func main() {
 	}
 	userRepo := repo.NewUser(db)
 	userService = service.NewUser(userRepo)
+	authService = service.NewAuth(userService)
 
 	// Echo instance
 	e := echo.New()
@@ -32,6 +34,8 @@ func main() {
 	e.POST("/createuser", createUser)
 	e.GET("/listuser", list)
 	e.POST("/update", update)
+	e.POST("/delete", delete)
+	e.POST("/login", logIn)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":1323"))
@@ -67,7 +71,7 @@ func createUser(c echo.Context) error {
 		// fmt.Println(err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
-	return c.String(http.StatusOK, "Hello, World!")
+	return c.String(http.StatusOK, fmt.Sprintf("New user created: "+userName))
 }
 
 func getUserById(c echo.Context) error {
@@ -101,16 +105,38 @@ func update(c echo.Context) error {
 		err1 := userService.UpdateName(id, name)
 		if err1 != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err1.Error()))
+		} else {
+			return c.String(http.StatusOK, fmt.Sprintf("User ID "+id+" - name updated to "+name))
 		}
-		return err1
 	case "password":
 		// fmt.Println("...Field accepted - ", field)
 		err2 := userService.UpdatePassword(id, password)
 		if err2 != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err2.Error()))
+		} else {
+			return c.String(http.StatusOK, "User ID "+id+" - password updated.")
+
 		}
-		return err2
 	default:
 		return echo.NewHTTPError(http.StatusNotFound, "Internal Error: Field Not Found")
 	}
+}
+
+func delete(c echo.Context) error {
+	id := c.FormValue("id")
+	name, err := userService.DeleteUser(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, fmt.Sprintf("User deleted: "+name+", user ID = "+id))
+}
+
+func logIn(c echo.Context) error {
+	name := c.FormValue("name")
+	password := c.FormValue("password")
+	status, err := authService.LogIn(name, password)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, status)
 }

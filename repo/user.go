@@ -18,9 +18,11 @@ type UserInfo struct {
 type User interface {
 	CreateUser(userID string, userName string, password string) error
 	GetUserByID(userID string) (*UserInfo, error)
+	GetUserByName(userID string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
 	Update(UserInfo) error
 	// Update2(userID string, field string, updateInfo string) error
+	DeleteUser(UserID string) error
 }
 
 type user struct {
@@ -28,7 +30,6 @@ type user struct {
 }
 
 func NewUser(db *sql.DB) User {
-
 	return &user{
 		db: db,
 	}
@@ -45,7 +46,7 @@ func (u *user) CreateUser(userID string, userName string, password string) error
 		password,
 	)
 	if err != nil {
-		fmt.Println(err.Error())
+		// fmt.Println(err.Error())
 		return fmt.Errorf("repo.CreateUser: %s", err.Error())
 	}
 	return nil
@@ -71,7 +72,29 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 		// fmt.Println(userResult.Password)
 		return userResult, nil
 	}
+	return nil, fmt.Errorf("User Not Found")
+}
 
+func (u *user) GetUserByName(userName string) (*UserInfo, error) {
+	rows, err := u.db.Query(
+		fmt.Sprintf(
+			`SELECT userID, name, password FROM %s WHERE name = ?`,
+			tableName,
+		),
+		userName)
+	if err != nil {
+		return nil, fmt.Errorf("repo.GetUserByName: %s", err.Error())
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// var userResult UserInfo
+		userResult := &UserInfo{}
+		rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.Password)
+		// fmt.Println(userResult.UserID)
+		// fmt.Println(userResult.UserName)
+		// fmt.Println(userResult.Password)
+		return userResult, nil
+	}
 	return nil, fmt.Errorf("User Not Found")
 }
 
@@ -98,23 +121,18 @@ func (u *user) List() ([]*UserInfo, error) {
 
 func (u *user) Update(userInfo UserInfo) error {
 	tempUser := userInfo
-	fmt.Println("...#Repo response: Ready to update - ", tempUser)
-	updateResult, err := u.db.Exec(
-		`UPDATE "users" SET name = "test1", password="test2" WHERE userID ="1cb5c0c8-189a-4ec1-8ed0-c5ba4135b8e8"`,
+	_, err := u.db.Exec(
+		fmt.Sprintf(
+			`UPDATE "%s" SET name = ?, password = ? WHERE userID = ?`,
+			tableName,
+		),
+		tempUser.UserName,
+		tempUser.Password,
+		tempUser.UserID,
 	)
-	// updateResult, err := u.db.Exec(
-	// 	fmt.Sprintf(
-	// 		`UPDATE "%s" SET name = ?, password = ? WHERE userID = ?`,
-	// 		tableName,
-	// 	),
-	// 	tempUser.UserName,
-	// 	tempUser.Password,
-	// 	tempUser.UserID,
-	// )
 	if err != nil {
 		return fmt.Errorf("repo.Update: %s", err.Error())
 	}
-	fmt.Println("...#Repo response: Updated - ", updateResult)
 	return err
 }
 
@@ -134,3 +152,17 @@ func (u *user) Update(userInfo UserInfo) error {
 // 	fmt.Println("...#Repo response: Updated - ", updateResult)
 // 	return err
 // }
+
+func (u *user) DeleteUser(userID string) error {
+	_, err := u.db.Exec(
+		fmt.Sprintf(
+			`DELETE FROM %s where userID=?`,
+			tableName,
+		),
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("repo.DeleteUser: %s", err.Error())
+	}
+	return err
+}

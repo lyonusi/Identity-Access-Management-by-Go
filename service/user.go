@@ -1,10 +1,11 @@
 package service
 
 import (
+	"IAMbyGo/repo"
 	"fmt"
-	"helloworld/repo"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type UserInfo struct {
@@ -16,8 +17,10 @@ type User interface {
 	CreateUser(userName string, password string) error
 	GetUserByID(userID string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
-	UpdateName(useID string, userName string) error
-	UpdatePassword(useID string, password string) error
+	UpdateName(userID string, userName string) error
+	UpdatePassword(userID string, password string) error
+	DeleteUser(userID string) (string, error)
+	GetUserPassword(userName string) (userID string, password string, err error)
 }
 
 type user struct {
@@ -32,8 +35,13 @@ func NewUser(userRepo repo.User) User {
 
 func (u *user) CreateUser(userName string, password string) error {
 	id := uuid.New().String()
-	// fmt.Println(id)
-	err := u.userRepo.CreateUser(id, userName, password)
+	fmt.Println(id)
+	hashPassword, err := HashPassword(password)
+	if err != nil {
+		fmt.Println(err.Error())
+		return fmt.Errorf("service.CreateUser.HashPassword: %s", err.Error())
+	}
+	err = u.userRepo.CreateUser(id, userName, hashPassword)
 	if err != nil {
 		fmt.Println(err.Error())
 		return fmt.Errorf("service.CreateUser: %s", err.Error())
@@ -52,6 +60,14 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	}
 
 	return tempUser, nil
+}
+
+func (u *user) GetUserPassword(userName string) (userID string, password string, err error) {
+	returnedUser, err := u.userRepo.GetUserByName(userName)
+	if err != nil {
+		return "", "", fmt.Errorf("service.GetUserPassword: %s", err.Error())
+	}
+	return returnedUser.UserID, returnedUser.Password, nil
 }
 
 func (u *user) List() ([]*UserInfo, error) {
@@ -77,9 +93,9 @@ func (u *user) UpdateName(userID string, userName string) error {
 	returnedUser, err1 := u.userRepo.GetUserByID(userID)
 	if err1 != nil {
 		return fmt.Errorf("service.UpdateName.GetUserByID: %s", err1.Error())
-	} else {
-		// fmt.Println("...#Service response: ID received - ", userID, ", user name received - ", userName)
-	}
+	} //else {
+	// fmt.Println("...#Service response: ID received - ", userID, ", user name received - ", userName)
+	// }
 	tempUser := &repo.UserInfo{
 		UserID:   returnedUser.UserID,
 		UserName: userName,
@@ -90,9 +106,9 @@ func (u *user) UpdateName(userID string, userName string) error {
 	err := u.userRepo.Update(*tempUser)
 	if err != nil {
 		return fmt.Errorf("service.UpdateName.Update: %s", err.Error())
-	} else {
-		fmt.Println("...#Service response: tempUser updated - ", tempUser.UserName)
-	}
+	} //  else {
+	// 	fmt.Println("...#Service response: tempUser updated - ", tempUser.UserName)
+	// }
 	return err
 }
 
@@ -111,6 +127,25 @@ func (u *user) UpdatePassword(userID string, password string) error {
 		return fmt.Errorf("service.UpdatePassword.Update: %s", err.Error())
 	}
 	return err
+}
+
+func (u *user) DeleteUser(userID string) (string, error) {
+	returnedUser, err1 := u.userRepo.GetUserByID(userID)
+	if err1 != nil {
+		return "", fmt.Errorf("service.DeleteUser.GetUserByID: %s", err1.Error())
+	}
+	err := u.userRepo.DeleteUser(userID)
+	if err != nil {
+		return "", fmt.Errorf("service.DeleteUser.Delete: %s", err.Error())
+	}
+	return returnedUser.UserName, err
+}
+
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 5)
+	// fmt.Println(string(bytes))
+	// fmt.Println(bytes)
+	return string(bytes), err
 }
 
 // func convertUserInfo(userInfo repo.UserInfo) *UserInfo {
