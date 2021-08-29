@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 var userService service.User
@@ -28,13 +30,30 @@ func main() {
 	// Echo instance
 	e := echo.New()
 
-	// Routes
+	e.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+		Skipper: func(c echo.Context) bool {
+			return true
+		},
+		SigningKey: []byte(service.TokenKey),
+		AuthScheme: "Bearer",
+	}))
+
+	g := e.Group("/admin")
+	g.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+		SigningKey: []byte(service.TokenKey),
+		AuthScheme: "Bearer",
+	}))
+
+	// Routes - admin
+	g.GET("/getUserById", getUserById)
+	g.POST("/createuser", createUser)
+	g.GET("/listuser", list)
+	g.POST("/update", update)
+	g.POST("/delete", delete)
+	g.GET("/refreshtoken", refreshToken)
+
+	// Routes - public
 	e.GET("/", hello)
-	e.GET("/getUserById", getUserById)
-	e.POST("/createuser", createUser)
-	e.GET("/listuser", list)
-	e.POST("/update", update)
-	e.POST("/delete", delete)
 	e.POST("/login", logIn)
 
 	// Start server
@@ -58,7 +77,12 @@ func dbInit() (*sql.DB, error) {
 
 // Handler
 func hello(c echo.Context) error {
-	return c.String(http.StatusOK, "Hello, World!")
+	// token := c.Request().Header[echo.HeaderAuthorization][0]
+	// fmt.Println(token)
+	// return c.String(http.StatusOK, "Hello, World!")
+	// token, _ := authService.Sign("123123")
+	// authService.Validate(token)
+	return nil
 }
 
 func createUser(c echo.Context) error {
@@ -134,9 +158,26 @@ func delete(c echo.Context) error {
 func logIn(c echo.Context) error {
 	name := c.FormValue("name")
 	password := c.FormValue("password")
-	status, err := authService.LogIn(name, password)
+	_, err := authService.LogIn(name, password)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
-	return c.String(http.StatusOK, status)
+	userID, _, err := userService.GetUserPassword(name)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	token, err := authService.Sign(userID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, token)
+}
+
+func refreshToken(c echo.Context) error {
+	token := strings.TrimPrefix(c.Request().Header[echo.HeaderAuthorization][0], "Bearer ")
+	newToken, err := authService.RefreshToken(token)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, newToken)
 }
