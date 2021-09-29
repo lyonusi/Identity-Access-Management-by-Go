@@ -24,8 +24,9 @@ func main() {
 		log.Fatal(err)
 	}
 	userRepo := repo.NewUser(db)
+	tokenRepo := repo.NewUserToken(db)
 	userService = service.NewUser(userRepo)
-	authService = service.NewAuth(userService)
+	authService = service.NewAuth(userService, tokenRepo)
 
 	// Echo instance
 	e := echo.New()
@@ -55,6 +56,7 @@ func main() {
 	// Routes - public
 	e.GET("/", hello)
 	e.POST("/login", logIn)
+	e.POST("/emaillogin", emailLogIn)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":1323"))
@@ -66,11 +68,15 @@ func dbInit() (*sql.DB, error) {
 		return nil, fmt.Errorf("main.dbInit %s", err.Error())
 	}
 
-	statement, err := database.Prepare("CREATE TABLE IF NOT EXISTS users (userId VARCHAR(36) PRIMARY KEY, name VARCHAR(50), password VARCHAR(50))")
+	statement, err := database.Prepare("CREATE TABLE IF NOT EXISTS users (userId VARCHAR(36) PRIMARY KEY, name VARCHAR(50), email VARCHAR(50), password VARCHAR(50))")
 	if err != nil {
 		return nil, err
 	}
-
+	statement.Exec()
+	statement, err = database.Prepare("CREATE TABLE IF NOT EXISTS token (userId VARCHAR(36) PRIMARY KEY, token VARCHAR(50))")
+	if err != nil {
+		return nil, err
+	}
 	statement.Exec()
 	return database, nil
 }
@@ -87,15 +93,17 @@ func hello(c echo.Context) error {
 
 func createUser(c echo.Context) error {
 	userName := c.FormValue("name")
+	userEmail := c.FormValue("email")
 	password := c.FormValue("password")
+
 	// fmt.Println(userName)
 	// fmt.Println(password)
-	err := userService.CreateUser(userName, password)
+	err := userService.CreateUser(userName, userEmail, password)
 	if err != nil {
 		// fmt.Println(err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
-	return c.String(http.StatusOK, fmt.Sprintf("New user created: "+userName))
+	return c.String(http.StatusOK, fmt.Sprintf("New user ["+userName+"] created with email ["+userEmail+"]"))
 }
 
 func getUserById(c echo.Context) error {
@@ -162,7 +170,24 @@ func logIn(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
-	userID, _, err := userService.GetUserPassword(name)
+	userID, _, err := userService.GetPasswordByName(name)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	token, err := authService.Sign(userID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, token)
+}
+func emailLogIn(c echo.Context) error {
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+	_, err := authService.EmailLogIn(email, password)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	userID, _, err := userService.GetPasswordByEmail(email)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}

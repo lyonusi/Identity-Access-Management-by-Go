@@ -1,6 +1,7 @@
 package service
 
 import (
+	"IAMbyGo/repo"
 	"fmt"
 	"time"
 
@@ -8,32 +9,30 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// type UserInfo struct {
-// 	UserID   string `json:"userID"`
-// 	UserName string `json:"usersName"`
-// }
-
 var TokenKey = []byte("STeZg1g5IEwyGlD/5fiBjrJ+WtXDlU2SxKMWlJuwAAM=")
 
 type Auth interface {
 	LogIn(userName string, password string) (string, error)
+	EmailLogIn(userEmail string, password string) (string, error)
 	Sign(userID string) (string, error)
-	RefreshToken(token string) (string, error)
+	RefreshToken(tokenString string) (string, error)
 	// Validate(token string) (userID string, err error)
 }
 
 type auth struct {
 	userService User
+	tokenRepo   repo.Token
 }
 
-func NewAuth(userService User) Auth {
+func NewAuth(userService User, tokenRepo repo.Token) Auth {
 	return &auth{
 		userService: userService,
+		tokenRepo:   tokenRepo,
 	}
 }
 
 func (a *auth) LogIn(userName string, password string) (string, error) {
-	_, hashed, err := a.userService.GetUserPassword(userName)
+	_, hashed, err := a.userService.GetPasswordByName(userName)
 	if err != nil {
 		return "", fmt.Errorf("service.LogIn: %s", err.Error())
 	}
@@ -45,17 +44,46 @@ func (a *auth) LogIn(userName string, password string) (string, error) {
 	}
 }
 
+func (a *auth) EmailLogIn(userEmail string, password string) (string, error) {
+	_, hashed, err := a.userService.GetPasswordByEmail(userEmail)
+	if err != nil {
+		return "", fmt.Errorf("service.EmailLogIn: %s", err.Error())
+	}
+	tempUser, err := a.userService.GetUserByEmail(userEmail)
+	if err != nil {
+		return "", fmt.Errorf("service.EmailLogIn: %s", err.Error())
+	}
+	match := bcrypt.CompareHashAndPassword([]byte(hashed), []byte(password))
+	if match == nil {
+		return fmt.Sprintf("User " + tempUser.UserName + " logged in with " + tempUser.UserEmail), nil
+	} else {
+		return "", fmt.Errorf("log in failed")
+	}
+}
+
 func (a *auth) Sign(userID string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	tokenShort := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"userID": userID,
 		"exp":    time.Now().Add(time.Minute * 30).Unix(),
 	})
-	tokenString, err := token.SignedString(TokenKey)
+	tokenStringShort, err := tokenShort.SignedString(TokenKey)
 	if err != nil {
 		return "", fmt.Errorf("service.Sign: %s", err.Error())
 	}
-	// fmt.Println(tokenString)
-	return tokenString, nil
+	// tokenLong := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	// 	"userID": userID,
+	// 	"exp":    time.Now().Add(time.Hour * 24 * 30).Unix(),
+	// })
+	// tokenStringLong, err := tokenLong.SignedString(TokenKey)
+	// if err != nil {
+	// 	return "", fmt.Errorf("service.Sign: %s", err.Error())
+	// }
+	// err = a.tokenRepo.CreateToken(userID, tokenStringLong)
+	// if err != nil {
+	// 	return "", fmt.Errorf("service.Sign: %s", err.Error())
+	// }
+	// fmt.Println("~~~~~short and long generated and long saved!~~~~~", tokenStringShort, tokenStringLong)
+	return tokenStringShort, nil
 }
 
 // func (a *auth) Validate(tokenString string) (userID string, err error) {
