@@ -5,6 +5,8 @@ import (
 	"IAMbyGo/service"
 	"database/sql"
 	"fmt"
+	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -12,6 +14,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
+
+type Template struct {
+	templates *template.Template
+}
+
+func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+	return t.templates.ExecuteTemplate(w, name, data)
+}
 
 var userService service.User
 var authService service.Auth
@@ -24,8 +34,9 @@ func main() {
 		log.Fatal(err)
 	}
 	userRepo := repo.NewUser(db)
+	tokenRepo := repo.NewUserToken(db)
 	userService = service.NewUser(userRepo)
-	authService = service.NewAuth(userService)
+	authService = service.NewAuth(userService, tokenRepo)
 
 	// Echo instance
 	e := echo.New()
@@ -53,7 +64,12 @@ func main() {
 	g.GET("/refreshtoken", refreshToken)
 
 	// Routes - public
-	e.GET("/", hello)
+	// e.GET("/", hello)
+	// e.POST("/login", logIn)
+	e.POST("/emaillogin", emailLogIn)
+
+	e.File("/", "./frontend/index.html")
+	// e.POST("/login-form", loginForm)
 	e.POST("/login", logIn)
 
 	// Start server
@@ -66,11 +82,15 @@ func dbInit() (*sql.DB, error) {
 		return nil, fmt.Errorf("main.dbInit %s", err.Error())
 	}
 
-	statement, err := database.Prepare("CREATE TABLE IF NOT EXISTS users (userId VARCHAR(36) PRIMARY KEY, name VARCHAR(50), password VARCHAR(50))")
+	statement, err := database.Prepare("CREATE TABLE IF NOT EXISTS users (userId VARCHAR(36) PRIMARY KEY, name VARCHAR(50), email VARCHAR(50), password VARCHAR(50))")
 	if err != nil {
 		return nil, err
 	}
-
+	statement.Exec()
+	statement, err = database.Prepare("CREATE TABLE IF NOT EXISTS token (userId VARCHAR(36) PRIMARY KEY, token VARCHAR(50))")
+	if err != nil {
+		return nil, err
+	}
 	statement.Exec()
 	return database, nil
 }
@@ -87,15 +107,17 @@ func hello(c echo.Context) error {
 
 func createUser(c echo.Context) error {
 	userName := c.FormValue("name")
+	userEmail := c.FormValue("email")
 	password := c.FormValue("password")
+
 	// fmt.Println(userName)
 	// fmt.Println(password)
-	err := userService.CreateUser(userName, password)
+	err := userService.CreateUser(userName, userEmail, password)
 	if err != nil {
 		// fmt.Println(err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
-	return c.String(http.StatusOK, fmt.Sprintf("New user created: "+userName))
+	return c.String(http.StatusOK, fmt.Sprintf("New user ["+userName+"] created with email ["+userEmail+"]"))
 }
 
 func getUserById(c echo.Context) error {
@@ -156,13 +178,46 @@ func delete(c echo.Context) error {
 }
 
 func logIn(c echo.Context) error {
-	name := c.FormValue("name")
+	name := c.FormValue("username")
 	password := c.FormValue("password")
+	fmt.Println("username: ", name)
+	fmt.Println("password: ", password)
 	_, err := authService.LogIn(name, password)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
-	userID, _, err := userService.GetUserPassword(name)
+	userID, _, err := userService.GetPasswordByName(name)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	token, err := authService.Sign(userID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	t := &Template{
+		templates: template.Must(template.ParseGlob("./frontend/admin.html")),
+	}
+
+	c.Echo().Renderer = t
+	return c.Render(http.StatusOK, "hello", map[string]interface{}{
+		"username": name,
+		"userID":   userID,
+		"token":    token,
+	})
+
+	// return c.File("./public/admin.html")
+
+	// return c.String(http.StatusOK, token)
+}
+
+func emailLogIn(c echo.Context) error {
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+	_, err := authService.EmailLogIn(email, password)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	userID, _, err := userService.GetPasswordByEmail(email)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
@@ -180,4 +235,36 @@ func refreshToken(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
 	}
 	return c.String(http.StatusOK, newToken)
+}
+
+func loginForm(c echo.Context) error {
+	uname := c.FormValue("username")
+	pwd := c.FormValue("password")
+
+	_, err := authService.LogIn(uname, pwd)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	userID, _, err := userService.GetPasswordByName(uname)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	token, err := authService.Sign(userID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, token)
+
+	// t := &Template{
+	// 	templates: template.Must(template.ParseGlob("./frontend/admin.html")),
+	// }
+
+	// c.Echo().Renderer = t
+	// return c.Render(http.StatusOK, "hello", map[string]interface{}{
+	// 	"key1": "value1",
+	// 	"key2": "value2",
+	// 	"key3": "value3",
+	// })
+
+	// return c.File("./public/admin.html")
 }

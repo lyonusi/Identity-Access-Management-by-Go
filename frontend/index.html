@@ -1,0 +1,70 @@
+<html>
+    <h1>Welcome!</h1>
+    <p id="error"></p>
+    <p>Please login with your user name and password:</p>
+
+    <form action="/login" method="POST">
+        <div>
+            <label for ="username"><b>Username</b></label>
+            <input type="text" name="username" placeholder="Enter Username" id="username" value="name2" onchange="enableBtn()" required/>
+        </div>
+        <div>
+            <label for ="password"><b>Password</b></label>
+            <input type="password" name="password" placeholder="Enter Password" id="password" value="password2" onchange="enableBtn()" required />
+            <input type="checkbox" onclick="showPsw()">Show Password
+        </div>
+        <div>
+            <input type="submit" id="submitBtn" value="Submit" />
+        </div>
+        <!-- <div>
+            <b id="loginStatus"></b>
+        </div> -->
+      </form>
+</html>
+
+<script>
+    const uname = document.getElementById("username");
+    const psw = document.getElementById("password");
+    // const loginStatus = document.getElementById("loginStatus");
+
+    console.log(uname)
+    console.log(psw)
+    function showPsw() {
+    if (psw.type === "password") {
+        psw.type = "text";
+        } else {
+        psw.type = "password";
+        }
+    }
+
+    function enableBtn(){
+        // console.log("value"+ uname.value+psw.value)
+        if (uname.value ==="" || psw.value ==="") {
+            document.getElementById("submitBtn").disabled = true;
+        }else{
+            document.getElementById("submitBtn").disabled = false;
+        }
+    }
+
+    // function userLogin(path, param, method ='post'){
+    //     const form = document.createElement('form');
+    //     form.method = method;
+    //     form.action = path;
+
+    //     for (const key in params) {
+    //         if (params.hasOwnProperty(key)) {
+    //         const hiddenField = document.createElement('input');
+    //         hiddenField.type = 'hidden';
+    //         hiddenField.name = key;
+    //         hiddenField.value = params[key];
+
+    //         form.appendChild(hiddenField);
+    //         }
+    //     }
+
+    //     document.body.appendChild(form);
+    //     form.submit();
+    // }
+
+</script>
+

@@ -1,0 +1,41 @@
+{{define "hello"}}
+<h1>admin page</h1>
+
+Hello, {{index . "username"}}! </br>
+
+<p>Your User ID is {{index . "userID"}}</p>
+<p id="token" hidden>{{index . "token"}}</p>
+
+<ul id="userlist">
+    
+</ul>
+
+<script>
+    const token = document.getElementById("token").innerHTML
+    console.log(token)
+    listUser()
+
+    function listUser() {
+        fetch('/admin/listuser',{
+            headers: {
+                'Authorization' : 'Bearer ' + token
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data)
+                return data
+            })
+            .then(data => {
+                const userlist = document.getElementById("userlist")
+                data.forEach(element => {
+                const list = document.createElement('li');
+                list.appendChild(document.createTextNode(element.userID));
+                // console.log(list)
+                userlist.appendChild(list)
+                });
+            })
+    }
+</script>
+
+{{end}}

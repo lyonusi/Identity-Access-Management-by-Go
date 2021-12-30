@@ -9,39 +9,50 @@ import (
 )
 
 type UserInfo struct {
-	UserID   string `json:"userID"`
-	UserName string `json:"usersName"`
+	UserID    string `json:"userID"`
+	UserName  string `json:"userName"`
+	UserEmail string `json:"userEmail"`
 }
 
 type User interface {
-	CreateUser(userName string, password string) error
+	CreateUser(userName string, userEmail string, password string) error
 	GetUserByID(userID string) (*UserInfo, error)
+	GetUserByEmail(userEmail string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
 	UpdateName(userID string, userName string) error
 	UpdatePassword(userID string, password string) error
 	DeleteUser(userID string) (string, error)
-	GetUserPassword(userName string) (userID string, password string, err error)
+	GetPasswordByName(userName string) (userID string, password string, err error)
+	GetPasswordByEmail(userEmail string) (userID string, password string, err error)
+}
+
+type tools interface {
+	hashPassword(password string) (string, error)
+}
+
+type tool struct {
 }
 
 type user struct {
-	userRepo repo.User
+	privateMethods tools
+	userRepo       repo.User
 }
 
 func NewUser(userRepo repo.User) User {
 	return &user{
-		userRepo: userRepo,
+		userRepo:       userRepo,
+		privateMethods: &tool{},
 	}
 }
 
-func (u *user) CreateUser(userName string, password string) error {
+func (u *user) CreateUser(userName string, userEmail string, password string) error {
 	id := uuid.New().String()
-	fmt.Println(id)
-	hashPassword, err := HashPassword(password)
+	hashPassword, err := u.privateMethods.hashPassword(password)
 	if err != nil {
 		fmt.Println(err.Error())
 		return fmt.Errorf("service.CreateUser.HashPassword: %s", err.Error())
 	}
-	err = u.userRepo.CreateUser(id, userName, hashPassword)
+	err = u.userRepo.CreateUser(id, userName, userEmail, hashPassword)
 	if err != nil {
 		fmt.Println(err.Error())
 		return fmt.Errorf("service.CreateUser: %s", err.Error())
@@ -55,17 +66,39 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 		return nil, fmt.Errorf("service.GetUserByID: %s", err.Error())
 	}
 	tempUser := &UserInfo{
-		UserID:   returnedUser.UserID,
-		UserName: returnedUser.UserName,
+		UserID:    returnedUser.UserID,
+		UserName:  returnedUser.UserName,
+		UserEmail: returnedUser.UserEmail,
 	}
 
 	return tempUser, nil
 }
 
-func (u *user) GetUserPassword(userName string) (userID string, password string, err error) {
+func (u *user) GetUserByEmail(userEmail string) (*UserInfo, error) {
+	returnedUser, err := u.userRepo.GetUserByEmail(userEmail)
+	if err != nil {
+		return nil, fmt.Errorf("service.GetUserByEmail: %s", err.Error())
+	}
+	tempUser := &UserInfo{
+		UserID:    returnedUser.UserID,
+		UserName:  returnedUser.UserName,
+		UserEmail: returnedUser.UserEmail,
+	}
+	return tempUser, nil
+}
+
+func (u *user) GetPasswordByName(userName string) (userID string, password string, err error) {
 	returnedUser, err := u.userRepo.GetUserByName(userName)
 	if err != nil {
-		return "", "", fmt.Errorf("service.GetUserPassword: %s", err.Error())
+		return "", "", fmt.Errorf("service.GetPasswordByName: %s", err.Error())
+	}
+	return returnedUser.UserID, returnedUser.Password, nil
+}
+
+func (u *user) GetPasswordByEmail(userEmail string) (userID string, password string, err error) {
+	returnedUser, err := u.userRepo.GetUserByEmail(userEmail)
+	if err != nil {
+		return "", "", fmt.Errorf("service.GetPasswordByEmail: %s", err.Error())
 	}
 	return returnedUser.UserID, returnedUser.Password, nil
 }
@@ -80,8 +113,9 @@ func (u *user) List() ([]*UserInfo, error) {
 	var UserList []*UserInfo
 	for i := 0; i < length; i++ {
 		tempUser := &UserInfo{
-			UserID:   userList[i].UserID,
-			UserName: userList[i].UserName,
+			UserID:    userList[i].UserID,
+			UserName:  userList[i].UserName,
+			UserEmail: userList[i].UserEmail,
 		}
 		UserList = append(UserList, tempUser)
 		// fmt.Println("UserList by now ---- ", fmt.Sprintf("%+v", UserList))
@@ -141,7 +175,7 @@ func (u *user) DeleteUser(userID string) (string, error) {
 	return returnedUser.UserName, err
 }
 
-func HashPassword(password string) (string, error) {
+func (t *tool) hashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 5)
 	// fmt.Println(string(bytes))
 	// fmt.Println(bytes)

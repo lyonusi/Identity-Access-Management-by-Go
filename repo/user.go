@@ -10,15 +10,17 @@ import (
 var tableName = "users"
 
 type UserInfo struct {
-	UserID   string
-	UserName string
-	Password string
+	UserID    string
+	UserName  string
+	UserEmail string
+	Password  string
 }
 
 type User interface {
-	CreateUser(userID string, userName string, password string) error
+	CreateUser(userID string, userName string, userEmail string, password string) error
 	GetUserByID(userID string) (*UserInfo, error)
 	GetUserByName(userID string) (*UserInfo, error)
+	GetUserByEmail(userID string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
 	Update(UserInfo) error
 	// Update2(userID string, field string, updateInfo string) error
@@ -35,14 +37,15 @@ func NewUser(db *sql.DB) User {
 	}
 }
 
-func (u *user) CreateUser(userID string, userName string, password string) error {
+func (u *user) CreateUser(userID string, userName string, userEmail string, password string) error {
 	_, err := u.db.Exec(
 		fmt.Sprintf(
-			`INSERT INTO %s (userID, name, password) VALUES (?, ?, ?)`,
+			`INSERT INTO %s (userID, name, email, password) VALUES (?, ?, ?,?)`,
 			tableName,
 		),
 		userID,
 		userName,
+		userEmail,
 		password,
 	)
 	if err != nil {
@@ -55,7 +58,7 @@ func (u *user) CreateUser(userID string, userName string, password string) error
 func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	rows, err := u.db.Query(
 		fmt.Sprintf(
-			`SELECT userID, name, password FROM %s WHERE userID = ?`,
+			`SELECT userID, name, email, password FROM %s WHERE userID = ?`,
 			tableName,
 		),
 		userID)
@@ -78,7 +81,7 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 func (u *user) GetUserByName(userName string) (*UserInfo, error) {
 	rows, err := u.db.Query(
 		fmt.Sprintf(
-			`SELECT userID, name, password FROM %s WHERE name = ?`,
+			`SELECT userID, name, email, password FROM %s WHERE name = ?`,
 			tableName,
 		),
 		userName)
@@ -89,7 +92,30 @@ func (u *user) GetUserByName(userName string) (*UserInfo, error) {
 	for rows.Next() {
 		// var userResult UserInfo
 		userResult := &UserInfo{}
-		rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.Password)
+		rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.UserEmail, &userResult.Password)
+		// fmt.Println(userResult.UserID)
+		// fmt.Println(userResult.UserName)
+		// fmt.Println(userResult.Password)
+		return userResult, nil
+	}
+	return nil, fmt.Errorf("User Not Found")
+}
+
+func (u *user) GetUserByEmail(userEmail string) (*UserInfo, error) {
+	rows, err := u.db.Query(
+		fmt.Sprintf(
+			`SELECT userID, name, email, password FROM %s WHERE email = ?`,
+			tableName,
+		),
+		userEmail)
+	if err != nil {
+		return nil, fmt.Errorf("repo.GetUserByEmail: %s", err.Error())
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// var userResult UserInfo
+		userResult := &UserInfo{}
+		rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.UserEmail, &userResult.Password)
 		// fmt.Println(userResult.UserID)
 		// fmt.Println(userResult.UserName)
 		// fmt.Println(userResult.Password)
@@ -101,7 +127,7 @@ func (u *user) GetUserByName(userName string) (*UserInfo, error) {
 func (u *user) List() ([]*UserInfo, error) {
 	rows, err := u.db.Query(
 		fmt.Sprintf(
-			`SELECT userID, name FROM %s`,
+			`SELECT userID, email, name FROM %s`,
 			tableName,
 		),
 	)
@@ -111,7 +137,7 @@ func (u *user) List() ([]*UserInfo, error) {
 	var userList []*UserInfo
 	for rows.Next() {
 		userResult := &UserInfo{}
-		rows.Scan(&userResult.UserID, &userResult.UserName)
+		rows.Scan(&userResult.UserID, &userResult.UserEmail, &userResult.UserName)
 		// fmt.Println(userResult.UserID)
 		// fmt.Println(userResult.UserName)
 		userList = append(userList, userResult)
@@ -123,10 +149,11 @@ func (u *user) Update(userInfo UserInfo) error {
 	tempUser := userInfo
 	_, err := u.db.Exec(
 		fmt.Sprintf(
-			`UPDATE "%s" SET name = ?, password = ? WHERE userID = ?`,
+			`UPDATE "%s" SET name = ?, email =?, password = ? WHERE userID = ?`,
 			tableName,
 		),
 		tempUser.UserName,
+		tempUser.UserEmail,
 		tempUser.Password,
 		tempUser.UserID,
 	)
