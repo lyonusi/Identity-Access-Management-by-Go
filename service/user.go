@@ -2,8 +2,11 @@ package service
 
 import (
 	"IAMbyGo/repo"
+	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -14,16 +17,26 @@ type UserInfo struct {
 	UserEmail string `json:"userEmail"`
 }
 
+type UserScope struct {
+	UserID    string   `json:"userID"`
+	UserScope []string `json:"userScope"`
+}
+
 type User interface {
 	CreateUser(userName string, userEmail string, password string) error
 	GetUserByID(userID string) (*UserInfo, error)
 	GetUserByEmail(userEmail string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
-	UpdateName(userID string, userName string) error
+	UpdateUser(userInfo UserInfo) error
 	UpdatePassword(userID string, password string) error
 	DeleteUser(userID string) (string, error)
 	GetPasswordByName(userName string) (userID string, password string, err error)
 	GetPasswordByEmail(userEmail string) (userID string, password string, err error)
+	SetScopeByID(userID string, userScope string) error
+	CheckUserScope(userID string, userScope string) (bool, error)
+	ListScopeByID(userID string) (*UserScope, error)
+	ListUserByScope(scope string) ([]*UserInfo, error)
+	DeleteScopeByID(userID string, userScope string) error
 }
 
 type tools interface {
@@ -36,13 +49,85 @@ type tool struct {
 type user struct {
 	privateMethods tools
 	userRepo       repo.User
+	userScope      repo.Scope
+	redisClient    *redis.Client
 }
 
-func NewUser(userRepo repo.User) User {
+func NewUser(userRepo repo.User, redisClient *redis.Client, userScope repo.Scope) User {
 	return &user{
 		userRepo:       userRepo,
+		redisClient:    redisClient,
+		userScope:      userScope,
 		privateMethods: &tool{},
 	}
+}
+
+func (u *user) SetScopeByID(userID string, userScope string) error {
+	checkCurrentScope, err := u.userScope.CheckUserScope(userID, userScope)
+	if err != nil {
+		return fmt.Errorf("service.SetScopeByID.GetCurrentScope: %s", err.Error())
+	}
+	if checkCurrentScope {
+		return fmt.Errorf("service.SetScopeByID.GetCurrentScope: scope already exists")
+	}
+	err = u.userScope.SetScopeByID(userID, userScope)
+	if err != nil {
+		return fmt.Errorf("service.SetScopeByID: %s", err.Error())
+	}
+	return err
+}
+
+func (u *user) CheckUserScope(userID string, userScope string) (bool, error) {
+	checkCurrentScope, err := u.userScope.CheckUserScope(userID, userScope)
+	if err != nil {
+		return false, fmt.Errorf("service.SetScopeByID.GetCurrentScope: %s", err.Error())
+	}
+	if checkCurrentScope {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (u *user) ListScopeByID(userID string) (*UserScope, error) {
+	dbReturnedUserScope, err := u.userScope.GetScopeByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("service.GetScopeByID.GetScopeByID: %s", err.Error())
+	}
+	userScope := &UserScope{
+		UserID:    userID,
+		UserScope: dbReturnedUserScope.Scope,
+	}
+	return userScope, nil
+}
+func (u *user) ListUserByScope(scope string) ([]*UserInfo, error) {
+	dbReturnedUserIdList, err := u.userScope.ListUserIDByScope(scope)
+	if err != nil {
+		return nil, fmt.Errorf("service.ListUserByScope.ListUserIDByScoe: %s", err.Error())
+	}
+	var userList []*UserInfo
+	for i := 0; i < len(dbReturnedUserIdList); i++ {
+		userInfo, err := u.GetUserByID(dbReturnedUserIdList[i])
+		if err != nil {
+			return nil, fmt.Errorf("service.ListUserByScope.GetUserByID[%v]: %s", i, err.Error())
+		}
+		userList = append(userList, userInfo)
+	}
+	// fmt.Println("user list = ", userList)
+	return userList, nil
+}
+func (u *user) DeleteScopeByID(userID string, userScope string) error {
+	err := u.userScope.DeleteScopeByID(userID, userScope)
+	if err != nil {
+		return fmt.Errorf("service.DeleteScopeByID: %s", err.Error())
+	}
+	return nil
+}
+
+func (t *tool) hashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 5)
+	// fmt.Println(string(bytes))
+	// fmt.Println(bytes)
+	return string(bytes), err
 }
 
 func (u *user) CreateUser(userName string, userEmail string, password string) error {
@@ -60,18 +145,95 @@ func (u *user) CreateUser(userName string, userEmail string, password string) er
 	return nil
 }
 
+// func (u *user) GetUserByID(userID string) (*UserInfo, error) {
+// 	var ctx = context.Background()
+// 	redisReturnedUser, err := u.redisClient.Get(ctx, fmt.Sprintf("user-%s", userID)).Result()
+
+// 	ifReadFromDb := false
+// 	tempUserJson := UserInfo{}
+
+// 	if err == redis.Nil || err != nil {
+// 		ifReadFromDb = true
+// 		fmt.Println(userID, " does not exist")
+// 	} else {
+// 		fmt.Println(userID, "-----", redisReturnedUser)
+// 		err = json.Unmarshal([]byte(redisReturnedUser), &tempUserJson)
+// 		if err != nil {
+// 			ifReadFromDb = true
+// 		}
+// 	}
+
+// 	if ifReadFromDb {
+// 		dbReturnedUser, err := u.userRepo.GetUserByID(userID)
+// 		fmt.Printf("%v\n", dbReturnedUser)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("service.GetUserByID: %s", err.Error())
+// 		}
+
+// 		tempUser := &UserInfo{
+// 			UserID:    dbReturnedUser.UserID,
+// 			UserName:  dbReturnedUser.UserName,
+// 			UserEmail: dbReturnedUser.UserEmail,
+// 		}
+
+// 		var tempUserString []byte
+// 		tempUserString, err = json.Marshal(tempUser)
+
+// 		fmt.Println(tempUserString)
+
+// 		if err != nil {
+// 			fmt.Println(fmt.Errorf("service.GetUserByID.toString: %s", err.Error()))
+// 			return tempUser, nil
+// 		}
+// 		_, err = u.redisClient.Set(ctx, fmt.Sprintf("user-%s", userID), tempUserString, 0).Result()
+
+// 		if err != nil {
+// 			fmt.Println(fmt.Errorf("service.GetUserByID.setRedis: %s", err.Error()))
+// 			return tempUser, nil
+// 		}
+// 		return tempUser, nil
+// 	} else {
+// 		return &tempUserJson, nil
+// 	}
+// }
+
 func (u *user) GetUserByID(userID string) (*UserInfo, error) {
-	returnedUser, err := u.userRepo.GetUserByID(userID)
-	if err != nil {
-		return nil, fmt.Errorf("service.GetUserByID: %s", err.Error())
-	}
-	tempUser := &UserInfo{
-		UserID:    returnedUser.UserID,
-		UserName:  returnedUser.UserName,
-		UserEmail: returnedUser.UserEmail,
+	readDb := func() ([]byte, error) {
+		dbReturnedUser, err := u.userRepo.GetUserByID(userID)
+		// fmt.Printf("%v\n", dbReturnedUser)
+		if err != nil {
+			return nil, fmt.Errorf("service.GetUserByID: %s", err.Error())
+		}
+
+		dbReturnedUserInfo := &UserInfo{
+			UserID:    dbReturnedUser.UserID,
+			UserName:  dbReturnedUser.UserName,
+			UserEmail: dbReturnedUser.UserEmail,
+		}
+
+		userInfoJson, err := json.Marshal(dbReturnedUserInfo)
+		if err != nil {
+			return nil, err
+		}
+		return userInfoJson, nil
 	}
 
-	return tempUser, nil
+	result, err := repo.ReadDbWithCache(readDb, fmt.Sprintf("user-%s", userID), u.redisClient)
+
+	if err != nil {
+		return nil, err
+	}
+
+	userInfo := UserInfo{}
+
+	// fmt.Printf("result = %+v\n", result)
+	err = json.Unmarshal(result, &userInfo)
+	if err != nil {
+		return nil, err
+	}
+	// fmt.Println("userInfo = ", userInfo)
+
+	return &userInfo, nil
 }
 
 func (u *user) GetUserByEmail(userEmail string) (*UserInfo, error) {
@@ -123,26 +285,21 @@ func (u *user) List() ([]*UserInfo, error) {
 	return UserList, nil
 }
 
-func (u *user) UpdateName(userID string, userName string) error {
-	returnedUser, err1 := u.userRepo.GetUserByID(userID)
-	if err1 != nil {
-		return fmt.Errorf("service.UpdateName.GetUserByID: %s", err1.Error())
-	} //else {
-	// fmt.Println("...#Service response: ID received - ", userID, ", user name received - ", userName)
-	// }
+func (u *user) UpdateUser(userInfo UserInfo) error {
 	tempUser := &repo.UserInfo{
-		UserID:   returnedUser.UserID,
-		UserName: userName,
-		Password: returnedUser.Password,
+		UserID:    userInfo.UserID,
+		UserName:  userInfo.UserName,
+		UserEmail: userInfo.UserEmail,
 	}
 	// fmt.Println("...#Service response: tempUser created - ", tempUser)
 
-	err := u.userRepo.Update(*tempUser)
+	err := u.userRepo.UpdateWithoutPassword(*tempUser)
 	if err != nil {
-		return fmt.Errorf("service.UpdateName.Update: %s", err.Error())
-	} //  else {
-	// 	fmt.Println("...#Service response: tempUser updated - ", tempUser.UserName)
-	// }
+		return fmt.Errorf("service.UpdateUser.Update: %s", err.Error())
+	}
+
+	u.redisClient.Del(context.Background(), fmt.Sprintf("user-%s", tempUser.UserID))
+
 	return err
 }
 
@@ -172,19 +329,6 @@ func (u *user) DeleteUser(userID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("service.DeleteUser.Delete: %s", err.Error())
 	}
+	u.redisClient.Del(context.Background(), fmt.Sprintf("user-%s", userID))
 	return returnedUser.UserName, err
 }
-
-func (t *tool) hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 5)
-	// fmt.Println(string(bytes))
-	// fmt.Println(bytes)
-	return string(bytes), err
-}
-
-// func convertUserInfo(userInfo repo.UserInfo) *UserInfo {
-// 	return &UserInfo{
-// 		UserID:   userInfo.UserID,
-// 		UserName: userInfo.UserName,
-// 	}
-// }

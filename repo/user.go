@@ -23,7 +23,7 @@ type User interface {
 	GetUserByEmail(userID string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
 	Update(UserInfo) error
-	// Update2(userID string, field string, updateInfo string) error
+	UpdateWithoutPassword(UserInfo) error
 	DeleteUser(UserID string) error
 }
 
@@ -62,6 +62,7 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 			tableName,
 		),
 		userID)
+
 	if err != nil {
 		return nil, fmt.Errorf("repo.GetUserByID: %s", err.Error())
 	}
@@ -69,9 +70,13 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	for rows.Next() {
 		// var userResult UserInfo
 		userResult := &UserInfo{}
-		rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.Password)
+		err = rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.UserEmail, &userResult.Password)
+		if err != nil {
+			return nil, fmt.Errorf("repo.GetUserByID: %s", err.Error())
+		}
 		// fmt.Println(userResult.UserID)
 		// fmt.Println(userResult.UserName)
+		// fmt.Println(userResult.UserEmail)
 		// fmt.Println(userResult.Password)
 		return userResult, nil
 	}
@@ -163,22 +168,22 @@ func (u *user) Update(userInfo UserInfo) error {
 	return err
 }
 
-// func (u *user) Update2(userID string, field string, updateInfo string) error {
-// 	fmt.Println("...#Repo response: Ready to update - ", userID, field, updateInfo)
-// 	updateResult, err := u.db.Exec(
-// 		fmt.Sprintf(
-// 			`UPDATE %s SET %s = ? WHERE userID = ?`,
-// 			tableName,
-// 			field,
-// 		),
-// 		updateInfo,
-// 	)
-// 	if err != nil {
-// 		return fmt.Errorf("repo.Update: %s", err.Error())
-// 	}
-// 	fmt.Println("...#Repo response: Updated - ", updateResult)
-// 	return err
-// }
+func (u *user) UpdateWithoutPassword(userInfo UserInfo) error {
+	tempUser := userInfo
+	_, err := u.db.Exec(
+		fmt.Sprintf(
+			`UPDATE "%s" SET name = ?, email =? WHERE userID = ?`,
+			tableName,
+		),
+		tempUser.UserName,
+		tempUser.UserEmail,
+		tempUser.UserID,
+	)
+	if err != nil {
+		return fmt.Errorf("repo.UpdateWithoutPassword: %s", err.Error())
+	}
+	return err
+}
 
 func (u *user) DeleteUser(userID string) error {
 	_, err := u.db.Exec(

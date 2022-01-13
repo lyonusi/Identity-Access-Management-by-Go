@@ -1,46 +1,46 @@
 package main
 
 import (
+	"IAMbyGo/api"
 	"IAMbyGo/repo"
 	"IAMbyGo/service"
 	"database/sql"
 	"fmt"
-	"html/template"
-	"io"
 	"log"
-	"net/http"
-	"strings"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
-
-type Template struct {
-	templates *template.Template
-}
-
-func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
-}
 
 var userService service.User
 var authService service.Auth
 
 func main() {
 	fmt.Println("Server started....")
-
 	db, err := dbInit()
 	if err != nil {
 		log.Fatal(err)
 	}
-	userRepo := repo.NewUser(db)
-	tokenRepo := repo.NewUserToken(db)
-	userService = service.NewUser(userRepo)
-	authService = service.NewAuth(userService, tokenRepo)
 
-	// Echo instance
 	e := echo.New()
 
+	var redisClient *redis.Client
+	redisClient, err = repo.RedisClient()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	userRepo := repo.NewUser(db)
+	tokenRepo := repo.NewUserToken(db)
+	userScope := repo.NewUserScope(db)
+	userService = service.NewUser(userRepo, redisClient, userScope)
+	authService = service.NewAuth(userService, tokenRepo)
+	endpoint := api.NewApi(userService, authService)
+
+	// Echo instance
+	e.Use(middleware.CORS())
 	e.Use(middleware.JWTWithConfig(middleware.JWTConfig{
 		Skipper: func(c echo.Context) bool {
 			return true
@@ -56,24 +56,28 @@ func main() {
 	}))
 
 	// Routes - admin
-	g.GET("/getUserById", getUserById)
-	g.POST("/createuser", createUser)
-	g.GET("/listuser", list)
-	g.POST("/update", update)
-	g.POST("/delete", delete)
-	g.GET("/refreshtoken", refreshToken)
+	g.GET("/getUserById", endpoint.GetUserById)
+	g.POST("/createuser", endpoint.CreateUser)
+	g.GET("/listuser", endpoint.List)
+	g.POST("/update", endpoint.Update)
+	g.POST("/delete", endpoint.Delete)
+	g.GET("/refreshtoken", endpoint.RefreshToken)
+	g.POST("/setscope", endpoint.SetUserScope)
+	g.GET("/getscope", endpoint.GetUserScope)
+	g.GET("/listuserbyscope", endpoint.ListUserbyScope)
+	g.POST("/deleteuserscope", endpoint.DeleteUserScope)
 
 	// Routes - public
-	// e.GET("/", hello)
-	// e.POST("/login", logIn)
-	e.POST("/emaillogin", emailLogIn)
+	// e.GET("/", endpoint.Hello)
+	e.POST("/login", endpoint.LogIn)
+	e.POST("/emaillogin", endpoint.EmailLogIn)
 
 	e.File("/", "./frontend/index.html")
-	// e.POST("/login-form", loginForm)
-	e.POST("/login", logIn)
+	e.POST("/login-form", endpoint.LoginForm)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":1323"))
+
 }
 
 func dbInit() (*sql.DB, error) {
@@ -92,179 +96,10 @@ func dbInit() (*sql.DB, error) {
 		return nil, err
 	}
 	statement.Exec()
+	statement, err = database.Prepare("CREATE TABLE IF NOT EXISTS user_scope (userId VARCHAR(36), scope VARCHAR(50)); CREATE INDEX index_userId_scope ON user_scope (userId, scope)")
+	if err != nil {
+		return nil, err
+	}
+	statement.Exec()
 	return database, nil
-}
-
-// Handler
-func hello(c echo.Context) error {
-	// token := c.Request().Header[echo.HeaderAuthorization][0]
-	// fmt.Println(token)
-	// return c.String(http.StatusOK, "Hello, World!")
-	// token, _ := authService.Sign("123123")
-	// authService.Validate(token)
-	return nil
-}
-
-func createUser(c echo.Context) error {
-	userName := c.FormValue("name")
-	userEmail := c.FormValue("email")
-	password := c.FormValue("password")
-
-	// fmt.Println(userName)
-	// fmt.Println(password)
-	err := userService.CreateUser(userName, userEmail, password)
-	if err != nil {
-		// fmt.Println(err.Error())
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, fmt.Sprintf("New user ["+userName+"] created with email ["+userEmail+"]"))
-}
-
-func getUserById(c echo.Context) error {
-	id := c.QueryParam("userID")
-	user, err := userService.GetUserByID(id)
-	if err != nil {
-		// fmt.Println(err.Error())
-		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	// fmt.Println(user)
-	return c.JSON(http.StatusOK, user)
-}
-
-func list(c echo.Context) error {
-	userList, err := userService.List()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.JSON(http.StatusOK, userList)
-}
-
-func update(c echo.Context) error {
-	name := c.FormValue("name")
-	password := c.FormValue("password")
-	// fmt.Println("...name & password received - ", name, password)
-	id := c.QueryParam("userID")
-	// fmt.Println("...ID accepted - ", id)
-	switch field := c.QueryParam("field"); field {
-	case "name":
-		// fmt.Println("...Field accepted - ", field)
-		err1 := userService.UpdateName(id, name)
-		if err1 != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err1.Error()))
-		} else {
-			return c.String(http.StatusOK, fmt.Sprintf("User ID "+id+" - name updated to "+name))
-		}
-	case "password":
-		// fmt.Println("...Field accepted - ", field)
-		err2 := userService.UpdatePassword(id, password)
-		if err2 != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err2.Error()))
-		} else {
-			return c.String(http.StatusOK, "User ID "+id+" - password updated.")
-
-		}
-	default:
-		return echo.NewHTTPError(http.StatusNotFound, "Internal Error: Field Not Found")
-	}
-}
-
-func delete(c echo.Context) error {
-	id := c.FormValue("id")
-	name, err := userService.DeleteUser(id)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, fmt.Sprintf("User deleted: "+name+", user ID = "+id))
-}
-
-func logIn(c echo.Context) error {
-	name := c.FormValue("username")
-	password := c.FormValue("password")
-	fmt.Println("username: ", name)
-	fmt.Println("password: ", password)
-	_, err := authService.LogIn(name, password)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	userID, _, err := userService.GetPasswordByName(name)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	token, err := authService.Sign(userID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	t := &Template{
-		templates: template.Must(template.ParseGlob("./frontend/admin.html")),
-	}
-
-	c.Echo().Renderer = t
-	return c.Render(http.StatusOK, "hello", map[string]interface{}{
-		"username": name,
-		"userID":   userID,
-		"token":    token,
-	})
-
-	// return c.File("./public/admin.html")
-
-	// return c.String(http.StatusOK, token)
-}
-
-func emailLogIn(c echo.Context) error {
-	email := c.FormValue("email")
-	password := c.FormValue("password")
-	_, err := authService.EmailLogIn(email, password)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	userID, _, err := userService.GetPasswordByEmail(email)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	token, err := authService.Sign(userID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, token)
-}
-
-func refreshToken(c echo.Context) error {
-	token := strings.TrimPrefix(c.Request().Header[echo.HeaderAuthorization][0], "Bearer ")
-	newToken, err := authService.RefreshToken(token)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, newToken)
-}
-
-func loginForm(c echo.Context) error {
-	uname := c.FormValue("username")
-	pwd := c.FormValue("password")
-
-	_, err := authService.LogIn(uname, pwd)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	userID, _, err := userService.GetPasswordByName(uname)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	token, err := authService.Sign(userID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, token)
-
-	// t := &Template{
-	// 	templates: template.Must(template.ParseGlob("./frontend/admin.html")),
-	// }
-
-	// c.Echo().Renderer = t
-	// return c.Render(http.StatusOK, "hello", map[string]interface{}{
-	// 	"key1": "value1",
-	// 	"key2": "value2",
-	// 	"key3": "value3",
-	// })
-
-	// return c.File("./public/admin.html")
 }

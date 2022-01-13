@@ -62,8 +62,14 @@ func (a *auth) EmailLogIn(userEmail string, password string) (string, error) {
 }
 
 func (a *auth) Sign(userID string) (string, error) {
+	scope, err := a.userService.ListScopeByID(userID)
+	if err != nil {
+		return "", fmt.Errorf("service.Sign.GetScope: %s", err.Error())
+	}
+	// fmt.Println("service.Sign.GetScope:", scope.UserScope)
 	tokenShort := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"userID": userID,
+		"scope":  scope.UserScope,
 		"exp":    time.Now().Add(time.Minute * 30).Unix(),
 	})
 	tokenStringShort, err := tokenShort.SignedString(TokenKey)
@@ -103,9 +109,15 @@ func (a *auth) RefreshToken(tokenString string) (string, error) {
 	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return "", nil
 	})
-	userID := token.Claims.(jwt.MapClaims)["userID"]
+	userID := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["userID"])
+	scope, err := a.userService.ListScopeByID(userID)
+	if err != nil {
+		return "", fmt.Errorf("service.Sign.GetScope: %s", err.Error())
+	}
+
 	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"userID": userID,
+		"scope":  scope.UserScope,
 		"exp":    time.Now().Add(time.Minute * 30).Unix(),
 	})
 	newTokenString, err := newToken.SignedString(TokenKey)
