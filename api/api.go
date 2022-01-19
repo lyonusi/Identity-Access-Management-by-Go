@@ -68,16 +68,16 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 // 	}
 // 	return c.JSON(http.StatusOK, result)
 // }
-func (a *api) Hello(w http.ResponseWriter, req *http.Request) {
-	token := req.Header.Get("Authorization")
-	fmt.Println(token)
-	// return c.String(http.StatusOK, "Hello, World!")
-	// token, _ := a.authService.Sign("123123")
-	// result, err := a.authService.Validate(token)
-	// if err != nil {
-	// 	return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	// }
-}
+// func (a *api) Hello(w http.ResponseWriter, req *http.Request) {
+// 	token := req.Header.Get("Authorization")
+// 	fmt.Println(token)
+// 	// return c.String(http.StatusOK, "Hello, World!")
+// 	// token, _ := a.authService.Sign("123123")
+// 	// result, err := a.authService.Validate(token)
+// 	// if err != nil {
+// 	// 	return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+// 	// }
+// }
 
 func (a *api) CreateUser(c echo.Context) error {
 	userName := c.FormValue("name")

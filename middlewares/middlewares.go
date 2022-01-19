@@ -27,16 +27,16 @@ func ValidateJWT(handler http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func Middleware2(handler http.HandlerFunc) http.HandlerFunc {
-	fmt.Println("2~~~")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("middleware 2 req")
+// func Middleware2(handler http.HandlerFunc) http.HandlerFunc {
+// 	fmt.Println("2~~~")
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		fmt.Println("middleware 2 req")
 
-		r.Header.Set("BCD", "234")
-		fmt.Println(r.Header.Get("BCD"))
-		handler.ServeHTTP(w, r)
+// 		r.Header.Set("BCD", "234")
+// 		fmt.Println(r.Header.Get("BCD"))
+// 		handler.ServeHTTP(w, r)
 
-		fmt.Println("middleware 2 writer")
+// 		fmt.Println("middleware 2 writer")
 
-	})
-}
+// 	})
+// }
