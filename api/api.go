@@ -12,7 +12,8 @@ import (
 )
 
 type Api interface {
-	Hello(c echo.Context) error
+	// Hello(c echo.Context) error
+	// Hello(w http.ResponseWriter, req *http.Request)
 	CreateUser(c echo.Context) error
 	GetUserById(c echo.Context) error
 	List(c echo.Context) error
@@ -40,10 +41,11 @@ func NewApi(userService service.User, authService service.Auth) Api {
 }
 
 type loginResponse struct {
-	UserID    string `json:"userID"`
-	UserName  string `json:"userName"`
-	UserEmail string `json:"userEmail"`
-	Token     string `json:"token"`
+	UserID    string   `json:"userID"`
+	UserName  string   `json:"userName"`
+	UserEmail string   `json:"userEmail"`
+	Token     string   `json:"token"`
+	Scope     []string `json:"scope"`
 }
 
 type Template struct {
@@ -55,53 +57,26 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 }
 
 // Handler
-func (a *api) Hello(c echo.Context) error {
-	// token := c.Request().Header[echo.HeaderAuthorization][0]
-	// fmt.Println(token)
+// func (a *api) Hello(c echo.Context) error {
+// 	token := c.Request().Header[echo.HeaderAuthorization][0]
+// 	fmt.Println(token)
+// 	// return c.String(http.StatusOK, "Hello, World!")
+// 	// token, _ := a.authService.Sign("123123")
+// 	result, err := a.authService.Validate(token)
+// 	if err != nil {
+// 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+// 	}
+// 	return c.JSON(http.StatusOK, result)
+// }
+func (a *api) Hello(w http.ResponseWriter, req *http.Request) {
+	token := req.Header.Get("Authorization")
+	fmt.Println(token)
 	// return c.String(http.StatusOK, "Hello, World!")
 	// token, _ := a.authService.Sign("123123")
-	// a.authService.Validate(token)
-	return nil
-}
-
-func (a *api) SetUserScope(c echo.Context) error {
-	id := c.FormValue("userID")
-	scope := c.FormValue("scope")
-
-	err := a.userService.SetScopeByID(id, scope)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, fmt.Sprintf("User id ["+id+"] updated with ["+scope+"] scope"))
-}
-func (a *api) DeleteUserScope(c echo.Context) error {
-	id := c.FormValue("userID")
-	scope := c.FormValue("scope")
-
-	err := a.userService.DeleteScopeByID(id, scope)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.String(http.StatusOK, fmt.Sprintf("Deleted ["+scope+"] scope for userID ["+id+"]"))
-}
-func (a *api) GetUserScope(c echo.Context) error {
-	id := c.FormValue("userID")
-	userScope, err := a.userService.ListScopeByID(id)
-	if err != nil {
-		// fmt.Println(err.Error())
-		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	// fmt.Println(user)
-	return c.JSON(http.StatusOK, userScope)
-}
-func (a *api) ListUserbyScope(c echo.Context) error {
-	scope := c.FormValue("scope")
-
-	userList, err := a.userService.ListUserByScope(scope)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-	}
-	return c.JSON(http.StatusOK, userList)
+	// result, err := a.authService.Validate(token)
+	// if err != nil {
+	// 	return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	// }
 }
 
 func (a *api) CreateUser(c echo.Context) error {
@@ -206,6 +181,7 @@ func (a *api) LogIn(c echo.Context) error {
 		UserName:  userInfo.UserName,
 		UserEmail: userInfo.UserEmail,
 		Token:     token,
+		Scope:     userInfo.Scope,
 	}
 
 	return c.JSON(http.StatusOK, usernameLoginResponse)
@@ -283,4 +259,44 @@ func (a *api) LoginForm(c echo.Context) error {
 		"userID":   userID,
 		"token":    token,
 	})
+}
+
+func (a *api) SetUserScope(c echo.Context) error {
+	id := c.FormValue("userID")
+	scope := c.FormValue("scope")
+
+	err := a.userService.SetScopeByID(id, scope)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, fmt.Sprintf("User id ["+id+"] updated with ["+scope+"] scope"))
+}
+func (a *api) DeleteUserScope(c echo.Context) error {
+	id := c.FormValue("userID")
+	scope := c.FormValue("scope")
+
+	err := a.userService.DeleteScopeByID(id, scope)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.String(http.StatusOK, fmt.Sprintf("Deleted ["+scope+"] scope for userID ["+id+"]"))
+}
+func (a *api) GetUserScope(c echo.Context) error {
+	id := c.FormValue("userID")
+	userScope, err := a.userService.ListScopeByID(id)
+	if err != nil {
+		// fmt.Println(err.Error())
+		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	// fmt.Println(user)
+	return c.JSON(http.StatusOK, userScope)
+}
+func (a *api) ListUserbyScope(c echo.Context) error {
+	scope := c.FormValue("scope")
+
+	userList, err := a.userService.ListUserByScope(scope)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
+	}
+	return c.JSON(http.StatusOK, userList)
 }

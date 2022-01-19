@@ -46,7 +46,7 @@ func ReadDbWithCache(readDbFunc func() ([]byte, error), key string, client *redi
 		if err != nil {
 			fmt.Println(err)
 		}
-		return readDbFunc()
+		return setRedis, err
 	}
 	return []byte(redisData), nil
 }

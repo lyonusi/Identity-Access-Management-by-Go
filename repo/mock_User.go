@@ -9,13 +9,13 @@ type MockUser struct {
 	mock.Mock
 }
 
-// CreateUser provides a mock function with given fields: userID, userName, password
-func (_m *MockUser) CreateUser(userID string, userName string, password string) error {
-	ret := _m.Called(userID, userName, password)
+// CreateUser provides a mock function with given fields: userID, userName, userEmail, password
+func (_m *MockUser) CreateUser(userID string, userName string, userEmail string, password string) error {
+	ret := _m.Called(userID, userName, userEmail, password)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, string) error); ok {
-		r0 = rf(userID, userName, password)
+	if rf, ok := ret.Get(0).(func(string, string, string, string) error); ok {
+		r0 = rf(userID, userName, userEmail, password)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -35,6 +35,29 @@ func (_m *MockUser) DeleteUser(UserID string) error {
 	}
 
 	return r0
+}
+
+// GetUserByEmail provides a mock function with given fields: userID
+func (_m *MockUser) GetUserByEmail(userID string) (*UserInfo, error) {
+	ret := _m.Called(userID)
+
+	var r0 *UserInfo
+	if rf, ok := ret.Get(0).(func(string) *UserInfo); ok {
+		r0 = rf(userID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*UserInfo)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(userID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetUserByID provides a mock function with given fields: userID
@@ -108,6 +131,20 @@ func (_m *MockUser) List() ([]*UserInfo, error) {
 
 // Update provides a mock function with given fields: _a0
 func (_m *MockUser) Update(_a0 UserInfo) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(UserInfo) error); ok {
+		r0 = rf(_a0)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateWithoutPassword provides a mock function with given fields: _a0
+func (_m *MockUser) UpdateWithoutPassword(_a0 UserInfo) error {
 	ret := _m.Called(_a0)
 
 	var r0 error

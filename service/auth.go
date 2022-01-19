@@ -11,12 +11,17 @@ import (
 
 var TokenKey = []byte("STeZg1g5IEwyGlD/5fiBjrJ+WtXDlU2SxKMWlJuwAAM=")
 
+type JwtReturnedInfo struct {
+	UserID string
+	Scope  []interface{}
+}
+
 type Auth interface {
 	LogIn(userName string, password string) (string, error)
 	EmailLogIn(userEmail string, password string) (string, error)
 	Sign(userID string) (string, error)
 	RefreshToken(tokenString string) (string, error)
-	// Validate(token string) (userID string, err error)
+	Validate(token string) (*JwtReturnedInfo, error)
 }
 
 type auth struct {
@@ -92,18 +97,22 @@ func (a *auth) Sign(userID string) (string, error) {
 	return tokenStringShort, nil
 }
 
-// func (a *auth) Validate(tokenString string) (userID string, err error) {
-// 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-// 		return TokenKey, nil
-// 	})
-// 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-// 		fmt.Println(claims["userID"])
-// 		return claims["userID"].(string), nil
-// 	} else {
-// 		return "", fmt.Errorf("validate: %s", err.Error())
-// 	}
-
-// }
+func (a *auth) Validate(tokenString string) (*JwtReturnedInfo, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return TokenKey, nil
+	})
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		fmt.Println(claims["userID"])
+		fmt.Println(claims["scope"])
+		result := &JwtReturnedInfo{
+			UserID: claims["userID"].(string),
+			Scope:  claims["scope"].([]interface{}),
+		}
+		return result, nil
+	} else {
+		return nil, fmt.Errorf("validate: %s", err.Error())
+	}
+}
 
 func (a *auth) RefreshToken(tokenString string) (string, error) {
 	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

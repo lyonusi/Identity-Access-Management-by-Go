@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/labstack/echo/v4"
@@ -17,7 +18,7 @@ var userService service.User
 var authService service.Auth
 
 func main() {
-	fmt.Println("Server started....")
+	fmt.Println("Server starting....")
 	db, err := dbInit()
 	if err != nil {
 		log.Fatal(err)
@@ -68,12 +69,15 @@ func main() {
 	g.POST("/deleteuserscope", endpoint.DeleteUserScope)
 
 	// Routes - public
-	// e.GET("/", endpoint.Hello)
+	// e.GET("/hello", endpoint.Hello)
 	e.POST("/login", endpoint.LogIn)
 	e.POST("/emaillogin", endpoint.EmailLogIn)
 
 	e.File("/", "./frontend/index.html")
 	e.POST("/login-form", endpoint.LoginForm)
+
+	// Routes - public, custom middleward
+	// http.HandleFunc("/hello,", middlewares.Use(endpoint.Hello, middlewares.ValidateJWT))
 
 	// Start server
 	e.Logger.Fatal(e.Start(":1323"))
@@ -96,10 +100,18 @@ func dbInit() (*sql.DB, error) {
 		return nil, err
 	}
 	statement.Exec()
-	statement, err = database.Prepare("CREATE TABLE IF NOT EXISTS user_scope (userId VARCHAR(36), scope VARCHAR(50)); CREATE INDEX index_userId_scope ON user_scope (userId, scope)")
+	statement, err = database.Prepare("CREATE TABLE IF NOT EXISTS user_scope (userId VARCHAR(36), scope VARCHAR(50))")
 	if err != nil {
 		return nil, err
 	}
 	statement.Exec()
+	statement, err = database.Prepare("CREATE INDEX index_userId_scope ON user_scope (userId, scope)")
+	if err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			return nil, err
+		}
+	} else {
+		statement.Exec()
+	}
 	return database, nil
 }

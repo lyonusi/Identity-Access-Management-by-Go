@@ -14,6 +14,7 @@ type UserInfo struct {
 	UserName  string
 	UserEmail string
 	Password  string
+	Scope     []string
 }
 
 type User interface {
@@ -56,31 +57,53 @@ func (u *user) CreateUser(userID string, userName string, userEmail string, pass
 }
 
 func (u *user) GetUserByID(userID string) (*UserInfo, error) {
+	// rows, err := u.db.Query(
+	// 	fmt.Sprintf(
+	// 		`SELECT userID, name, email, password FROM %s WHERE userID = ?`,
+	// 		tableName,
+	// 	),
+	// 	userID)
+	// fmt.Println("repo.GetUserByID: ")
 	rows, err := u.db.Query(
 		fmt.Sprintf(
-			`SELECT userID, name, email, password FROM %s WHERE userID = ?`,
+			`SELECT userID, name, email, password, scope FROM 
+			(SELECT users.userID, users.name, users.email, users.password, user_scope.scope
+				FROM %s
+				INNER JOIN %s ON users.userID = user_scope.userID) WHERE userID = ?`,
 			tableName,
+			scopeTableName,
 		),
 		userID)
 
 	if err != nil {
-		return nil, fmt.Errorf("repo.GetUserByID: %s", err.Error())
+		return nil, fmt.Errorf("repo.GetUserByID: query error: %s", err.Error())
 	}
+
+	userResult := &UserInfo{}
+	var scopeArray []string
+
 	defer rows.Close()
 	for rows.Next() {
-		// var userResult UserInfo
-		userResult := &UserInfo{}
-		err = rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.UserEmail, &userResult.Password)
+		var scopeRow string
+		err = rows.Scan(
+			&userResult.UserID,
+			&userResult.UserName,
+			&userResult.UserEmail,
+			&userResult.Password,
+			&scopeRow,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("repo.GetUserByID: %s", err.Error())
+			return nil, fmt.Errorf("repo.GetUserByID: rows.Scan error: %s", err.Error())
 		}
-		// fmt.Println(userResult.UserID)
-		// fmt.Println(userResult.UserName)
-		// fmt.Println(userResult.UserEmail)
-		// fmt.Println(userResult.Password)
-		return userResult, nil
+		if userResult.UserID == "" {
+			return nil, fmt.Errorf("User Not Found")
+		}
+		scopeArray = append(scopeArray, scopeRow)
 	}
-	return nil, fmt.Errorf("User Not Found")
+	userResult.Scope = scopeArray
+
+	fmt.Println("repo.GetUserByID: ", userResult)
+	return userResult, nil
 }
 
 func (u *user) GetUserByName(userName string) (*UserInfo, error) {

@@ -12,9 +12,10 @@ import (
 )
 
 type UserInfo struct {
-	UserID    string `json:"userID"`
-	UserName  string `json:"userName"`
-	UserEmail string `json:"userEmail"`
+	UserID    string   `json:"userID"`
+	UserName  string   `json:"userName"`
+	UserEmail string   `json:"userEmail"`
+	Scope     []string `json:"scope"`
 }
 
 type UserScope struct {
@@ -60,74 +61,6 @@ func NewUser(userRepo repo.User, redisClient *redis.Client, userScope repo.Scope
 		userScope:      userScope,
 		privateMethods: &tool{},
 	}
-}
-
-func (u *user) SetScopeByID(userID string, userScope string) error {
-	checkCurrentScope, err := u.userScope.CheckUserScope(userID, userScope)
-	if err != nil {
-		return fmt.Errorf("service.SetScopeByID.GetCurrentScope: %s", err.Error())
-	}
-	if checkCurrentScope {
-		return fmt.Errorf("service.SetScopeByID.GetCurrentScope: scope already exists")
-	}
-	err = u.userScope.SetScopeByID(userID, userScope)
-	if err != nil {
-		return fmt.Errorf("service.SetScopeByID: %s", err.Error())
-	}
-	return err
-}
-
-func (u *user) CheckUserScope(userID string, userScope string) (bool, error) {
-	checkCurrentScope, err := u.userScope.CheckUserScope(userID, userScope)
-	if err != nil {
-		return false, fmt.Errorf("service.SetScopeByID.GetCurrentScope: %s", err.Error())
-	}
-	if checkCurrentScope {
-		return true, nil
-	}
-	return false, nil
-}
-
-func (u *user) ListScopeByID(userID string) (*UserScope, error) {
-	dbReturnedUserScope, err := u.userScope.GetScopeByID(userID)
-	if err != nil {
-		return nil, fmt.Errorf("service.GetScopeByID.GetScopeByID: %s", err.Error())
-	}
-	userScope := &UserScope{
-		UserID:    userID,
-		UserScope: dbReturnedUserScope.Scope,
-	}
-	return userScope, nil
-}
-func (u *user) ListUserByScope(scope string) ([]*UserInfo, error) {
-	dbReturnedUserIdList, err := u.userScope.ListUserIDByScope(scope)
-	if err != nil {
-		return nil, fmt.Errorf("service.ListUserByScope.ListUserIDByScoe: %s", err.Error())
-	}
-	var userList []*UserInfo
-	for i := 0; i < len(dbReturnedUserIdList); i++ {
-		userInfo, err := u.GetUserByID(dbReturnedUserIdList[i])
-		if err != nil {
-			return nil, fmt.Errorf("service.ListUserByScope.GetUserByID[%v]: %s", i, err.Error())
-		}
-		userList = append(userList, userInfo)
-	}
-	// fmt.Println("user list = ", userList)
-	return userList, nil
-}
-func (u *user) DeleteScopeByID(userID string, userScope string) error {
-	err := u.userScope.DeleteScopeByID(userID, userScope)
-	if err != nil {
-		return fmt.Errorf("service.DeleteScopeByID: %s", err.Error())
-	}
-	return nil
-}
-
-func (t *tool) hashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 5)
-	// fmt.Println(string(bytes))
-	// fmt.Println(bytes)
-	return string(bytes), err
 }
 
 func (u *user) CreateUser(userName string, userEmail string, password string) error {
@@ -198,7 +131,9 @@ func (u *user) CreateUser(userName string, userEmail string, password string) er
 // }
 
 func (u *user) GetUserByID(userID string) (*UserInfo, error) {
+	// fmt.Println("service.GetUserById: ")
 	readDb := func() ([]byte, error) {
+		// fmt.Println("service.GetUserById: readDbFunc")
 		dbReturnedUser, err := u.userRepo.GetUserByID(userID)
 		// fmt.Printf("%v\n", dbReturnedUser)
 		if err != nil {
@@ -209,6 +144,7 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 			UserID:    dbReturnedUser.UserID,
 			UserName:  dbReturnedUser.UserName,
 			UserEmail: dbReturnedUser.UserEmail,
+			Scope:     dbReturnedUser.Scope,
 		}
 
 		userInfoJson, err := json.Marshal(dbReturnedUserInfo)
@@ -223,7 +159,6 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	userInfo := UserInfo{}
 
 	// fmt.Printf("result = %+v\n", result)
@@ -331,4 +266,72 @@ func (u *user) DeleteUser(userID string) (string, error) {
 	}
 	u.redisClient.Del(context.Background(), fmt.Sprintf("user-%s", userID))
 	return returnedUser.UserName, err
+}
+
+func (u *user) SetScopeByID(userID string, userScope string) error {
+	checkCurrentScope, err := u.userScope.CheckUserScope(userID, userScope)
+	if err != nil {
+		return fmt.Errorf("service.SetScopeByID.GetCurrentScope: %s", err.Error())
+	}
+	if checkCurrentScope {
+		return fmt.Errorf("service.SetScopeByID.GetCurrentScope: scope already exists")
+	}
+	err = u.userScope.SetScopeByID(userID, userScope)
+	if err != nil {
+		return fmt.Errorf("service.SetScopeByID: %s", err.Error())
+	}
+	return err
+}
+
+func (u *user) CheckUserScope(userID string, userScope string) (bool, error) {
+	checkCurrentScope, err := u.userScope.CheckUserScope(userID, userScope)
+	if err != nil {
+		return false, fmt.Errorf("service.SetScopeByID.GetCurrentScope: %s", err.Error())
+	}
+	if checkCurrentScope {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (u *user) ListScopeByID(userID string) (*UserScope, error) {
+	dbReturnedUserScope, err := u.userScope.GetScopeByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("service.GetScopeByID.GetScopeByID: %s", err.Error())
+	}
+	userScope := &UserScope{
+		UserID:    userID,
+		UserScope: dbReturnedUserScope.Scope,
+	}
+	return userScope, nil
+}
+func (u *user) ListUserByScope(scope string) ([]*UserInfo, error) {
+	dbReturnedUserIdList, err := u.userScope.ListUserIDByScope(scope)
+	if err != nil {
+		return nil, fmt.Errorf("service.ListUserByScope.ListUserIDByScoe: %s", err.Error())
+	}
+	var userList []*UserInfo
+	for i := 0; i < len(dbReturnedUserIdList); i++ {
+		userInfo, err := u.GetUserByID(dbReturnedUserIdList[i])
+		if err != nil {
+			return nil, fmt.Errorf("service.ListUserByScope.GetUserByID[%v]: %s", i, err.Error())
+		}
+		userList = append(userList, userInfo)
+	}
+	// fmt.Println("user list = ", userList)
+	return userList, nil
+}
+func (u *user) DeleteScopeByID(userID string, userScope string) error {
+	err := u.userScope.DeleteScopeByID(userID, userScope)
+	if err != nil {
+		return fmt.Errorf("service.DeleteScopeByID: %s", err.Error())
+	}
+	return nil
+}
+
+func (t *tool) hashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 5)
+	// fmt.Println(string(bytes))
+	// fmt.Println(bytes)
+	return string(bytes), err
 }
