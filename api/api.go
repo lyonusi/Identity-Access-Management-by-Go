@@ -12,8 +12,7 @@ import (
 )
 
 type Api interface {
-	// Hello(c echo.Context) error
-	// Hello(w http.ResponseWriter, req *http.Request)
+	Hello(c echo.Context) error
 	CreateUser(c echo.Context) error
 	GetUserById(c echo.Context) error
 	List(c echo.Context) error
@@ -57,36 +56,30 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 }
 
 // Handler
-// func (a *api) Hello(c echo.Context) error {
-// 	token := c.Request().Header[echo.HeaderAuthorization][0]
-// 	fmt.Println(token)
-// 	// return c.String(http.StatusOK, "Hello, World!")
-// 	// token, _ := a.authService.Sign("123123")
-// 	result, err := a.authService.Validate(token)
-// 	if err != nil {
-// 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-// 	}
-// 	return c.JSON(http.StatusOK, result)
-// }
-// func (a *api) Hello(w http.ResponseWriter, req *http.Request) {
-// 	token := req.Header.Get("Authorization")
-// 	fmt.Println(token)
-// 	// return c.String(http.StatusOK, "Hello, World!")
-// 	// token, _ := a.authService.Sign("123123")
-// 	// result, err := a.authService.Validate(token)
-// 	// if err != nil {
-// 	// 	return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))
-// 	// }
-// }
+func (a *api) Hello(c echo.Context) error {
+	return c.JSON(http.StatusOK, "success")
+}
 
 func (a *api) CreateUser(c echo.Context) error {
 	userName := c.FormValue("name")
 	userEmail := c.FormValue("email")
 	password := c.FormValue("password")
+	scopeString := c.FormValue("scope")
 
+	scope := strings.Split(scopeString, ", ")
+	if len(userName)*len(userEmail)*len(password)*len(scope) == 0 {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Internal Error: invalid form value")
+	}
+
+	newUser := &service.CreateUserInfo{
+		UserName:  userName,
+		UserEmail: userEmail,
+		Password:  password,
+		Scope:     scope,
+	}
 	// fmt.Println(userName)
 	// fmt.Println(password)
-	err := a.userService.CreateUser(userName, userEmail, password)
+	err := a.userService.CreateUser(newUser)
 	if err != nil {
 		// fmt.Println(err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Internal Error: %s", err.Error()))

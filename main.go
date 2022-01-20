@@ -2,6 +2,7 @@ package main
 
 import (
 	"IAMbyGo/api"
+	"IAMbyGo/middlewares"
 	"IAMbyGo/repo"
 	"IAMbyGo/service"
 	"database/sql"
@@ -39,6 +40,7 @@ func main() {
 	userService = service.NewUser(userRepo, redisClient, userScope)
 	authService = service.NewAuth(userService, tokenRepo)
 	endpoint := api.NewApi(userService, authService)
+	middlewares := middlewares.NewMidWare(authService)
 
 	// Echo instance
 	e.Use(middleware.CORS())
@@ -48,12 +50,26 @@ func main() {
 		},
 		SigningKey: []byte(service.TokenKey),
 		AuthScheme: "Bearer",
+		// TokenLookup: "header:" + scopeHeader,
 	}))
+
+	m := e.Group("/read")
+	m.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("read"))
+	m.GET("/hello", endpoint.Hello)
+
+	r := e.Group("/read-write")
+	r.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("read", "write"))
+	r.GET("/hello", endpoint.Hello)
+
+	u := e.Group("/test")
+	u.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("test"))
+	u.GET("/hello", endpoint.Hello)
 
 	g := e.Group("/admin")
 	g.Use(middleware.JWTWithConfig(middleware.JWTConfig{
 		SigningKey: []byte(service.TokenKey),
 		AuthScheme: "Bearer",
+		// TokenLookup: "header:" + scopeHeader,
 	}))
 
 	// Routes - admin
@@ -76,12 +92,8 @@ func main() {
 	e.File("/", "./frontend/index.html")
 	e.POST("/login-form", endpoint.LoginForm)
 
-	// Routes - public, custom middleward
-	// http.HandleFunc("/hello,", middlewares.Use(endpoint.Hello, middlewares.ValidateJWT))
-
 	// Start server
 	e.Logger.Fatal(e.Start(":1323"))
-
 }
 
 func dbInit() (*sql.DB, error) {

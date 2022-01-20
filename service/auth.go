@@ -102,15 +102,15 @@ func (a *auth) Validate(tokenString string) (*JwtReturnedInfo, error) {
 		return TokenKey, nil
 	})
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		fmt.Println(claims["userID"])
-		fmt.Println(claims["scope"])
+		// fmt.Println("service.Validate: ",claims["userID"])
+		// fmt.Println("service.Validate: ",claims["scope"])
 		result := &JwtReturnedInfo{
 			UserID: claims["userID"].(string),
 			Scope:  claims["scope"].([]interface{}),
 		}
 		return result, nil
 	} else {
-		return nil, fmt.Errorf("validate: %s", err.Error())
+		return nil, fmt.Errorf("authService.validate: %s", err.Error())
 	}
 }
 

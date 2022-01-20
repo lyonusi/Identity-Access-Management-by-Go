@@ -23,8 +23,16 @@ type UserScope struct {
 	UserScope []string `json:"userScope"`
 }
 
+type CreateUserInfo struct {
+	UserName  string   `json:"userName"`
+	UserEmail string   `json:"userEmail"`
+	Password  string   `json:"password"`
+	Scope     []string `json:"scope"`
+}
+
 type User interface {
-	CreateUser(userName string, userEmail string, password string) error
+	// CreateUser(userName string, userEmail string, password string, scope []string) error
+	CreateUser(userInfo *CreateUserInfo) error
 	GetUserByID(userID string) (*UserInfo, error)
 	GetUserByEmail(userEmail string) (*UserInfo, error)
 	List() ([]*UserInfo, error)
@@ -63,72 +71,20 @@ func NewUser(userRepo repo.User, redisClient *redis.Client, userScope repo.Scope
 	}
 }
 
-func (u *user) CreateUser(userName string, userEmail string, password string) error {
+func (u *user) CreateUser(userInfo *CreateUserInfo) error {
 	id := uuid.New().String()
-	hashPassword, err := u.privateMethods.hashPassword(password)
+	hashedPassword, err := u.privateMethods.hashPassword(userInfo.Password)
 	if err != nil {
 		fmt.Println(err.Error())
 		return fmt.Errorf("service.CreateUser.HashPassword: %s", err.Error())
 	}
-	err = u.userRepo.CreateUser(id, userName, userEmail, hashPassword)
+	err = u.userRepo.CreateUser(id, userInfo.UserName, userInfo.UserEmail, hashedPassword, userInfo.Scope)
 	if err != nil {
 		fmt.Println(err.Error())
 		return fmt.Errorf("service.CreateUser: %s", err.Error())
 	}
 	return nil
 }
-
-// func (u *user) GetUserByID(userID string) (*UserInfo, error) {
-// 	var ctx = context.Background()
-// 	redisReturnedUser, err := u.redisClient.Get(ctx, fmt.Sprintf("user-%s", userID)).Result()
-
-// 	ifReadFromDb := false
-// 	tempUserJson := UserInfo{}
-
-// 	if err == redis.Nil || err != nil {
-// 		ifReadFromDb = true
-// 		fmt.Println(userID, " does not exist")
-// 	} else {
-// 		fmt.Println(userID, "-----", redisReturnedUser)
-// 		err = json.Unmarshal([]byte(redisReturnedUser), &tempUserJson)
-// 		if err != nil {
-// 			ifReadFromDb = true
-// 		}
-// 	}
-
-// 	if ifReadFromDb {
-// 		dbReturnedUser, err := u.userRepo.GetUserByID(userID)
-// 		fmt.Printf("%v\n", dbReturnedUser)
-// 		if err != nil {
-// 			return nil, fmt.Errorf("service.GetUserByID: %s", err.Error())
-// 		}
-
-// 		tempUser := &UserInfo{
-// 			UserID:    dbReturnedUser.UserID,
-// 			UserName:  dbReturnedUser.UserName,
-// 			UserEmail: dbReturnedUser.UserEmail,
-// 		}
-
-// 		var tempUserString []byte
-// 		tempUserString, err = json.Marshal(tempUser)
-
-// 		fmt.Println(tempUserString)
-
-// 		if err != nil {
-// 			fmt.Println(fmt.Errorf("service.GetUserByID.toString: %s", err.Error()))
-// 			return tempUser, nil
-// 		}
-// 		_, err = u.redisClient.Set(ctx, fmt.Sprintf("user-%s", userID), tempUserString, 0).Result()
-
-// 		if err != nil {
-// 			fmt.Println(fmt.Errorf("service.GetUserByID.setRedis: %s", err.Error()))
-// 			return tempUser, nil
-// 		}
-// 		return tempUser, nil
-// 	} else {
-// 		return &tempUserJson, nil
-// 	}
-// }
 
 func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	// fmt.Println("service.GetUserById: ")
@@ -213,6 +169,7 @@ func (u *user) List() ([]*UserInfo, error) {
 			UserID:    userList[i].UserID,
 			UserName:  userList[i].UserName,
 			UserEmail: userList[i].UserEmail,
+			// Scope:     userList[i].Scope,
 		}
 		UserList = append(UserList, tempUser)
 		// fmt.Println("UserList by now ---- ", fmt.Sprintf("%+v", UserList))
@@ -335,3 +292,55 @@ func (t *tool) hashPassword(password string) (string, error) {
 	// fmt.Println(bytes)
 	return string(bytes), err
 }
+
+// func (u *user) GetUserByID(userID string) (*UserInfo, error) {
+// 	var ctx = context.Background()
+// 	redisReturnedUser, err := u.redisClient.Get(ctx, fmt.Sprintf("user-%s", userID)).Result()
+
+// 	ifReadFromDb := false
+// 	tempUserJson := UserInfo{}
+
+// 	if err == redis.Nil || err != nil {
+// 		ifReadFromDb = true
+// 		fmt.Println(userID, " does not exist")
+// 	} else {
+// 		fmt.Println(userID, "-----", redisReturnedUser)
+// 		err = json.Unmarshal([]byte(redisReturnedUser), &tempUserJson)
+// 		if err != nil {
+// 			ifReadFromDb = true
+// 		}
+// 	}
+
+// 	if ifReadFromDb {
+// 		dbReturnedUser, err := u.userRepo.GetUserByID(userID)
+// 		fmt.Printf("%v\n", dbReturnedUser)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("service.GetUserByID: %s", err.Error())
+// 		}
+
+// 		tempUser := &UserInfo{
+// 			UserID:    dbReturnedUser.UserID,
+// 			UserName:  dbReturnedUser.UserName,
+// 			UserEmail: dbReturnedUser.UserEmail,
+// 		}
+
+// 		var tempUserString []byte
+// 		tempUserString, err = json.Marshal(tempUser)
+
+// 		fmt.Println(tempUserString)
+
+// 		if err != nil {
+// 			fmt.Println(fmt.Errorf("service.GetUserByID.toString: %s", err.Error()))
+// 			return tempUser, nil
+// 		}
+// 		_, err = u.redisClient.Set(ctx, fmt.Sprintf("user-%s", userID), tempUserString, 0).Result()
+
+// 		if err != nil {
+// 			fmt.Println(fmt.Errorf("service.GetUserByID.setRedis: %s", err.Error()))
+// 			return tempUser, nil
+// 		}
+// 		return tempUser, nil
+// 	} else {
+// 		return &tempUserJson, nil
+// 	}
+// }

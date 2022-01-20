@@ -1,42 +1,70 @@
 package middlewares
 
 import (
+	"IAMbyGo/service"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
+
+	"github.com/labstack/echo/v4"
 )
 
-func Use(next http.HandlerFunc, mfs ...middlewareFunc) http.HandlerFunc {
-	var hf = next
-	for i := len(mfs) - 1; i >= 0; i-- {
-		hf = mfs[i](hf)
+const SCOPE_HEADER string = "X-scope"
+
+var r = regexp.MustCompile(`\[(.*)\]`)
+
+type JWTInfo struct {
+	UserID string
+	Scope  []string
+}
+type midware struct {
+	authService service.Auth
+}
+
+func NewMidWare(authService service.Auth) Midware {
+	return &midware{
+		authService: authService,
 	}
-	return hf
 }
 
-type middlewareFunc func(handler http.HandlerFunc) http.HandlerFunc
-
-func ValidateJWT(handler http.HandlerFunc) http.HandlerFunc {
-	fmt.Println("1~~~")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("middleware ValidateJWT req")
-		token := r.Header.Get("Authorization")
-		fmt.Println(token)
-		handler.ServeHTTP(w, r)
-
-		fmt.Println("middleware 1 writer")
-	})
+type Midware interface {
+	ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc
+	CheckScopeFuncFactory(scope ...string) func(next echo.HandlerFunc) echo.HandlerFunc
 }
 
-// func Middleware2(handler http.HandlerFunc) http.HandlerFunc {
-// 	fmt.Println("2~~~")
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		fmt.Println("middleware 2 req")
+func (m *midware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		token := c.Request().Header.Get("Authorization")
+		token = strings.ReplaceAll(token, "Bearer ", "")
+		fmt.Println("middleware get token = ", token)
+		result, err := m.authService.Validate(token)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("Internal Error: %s", err.Error()))
+		}
+		// fmt.Println(fmt.Sprintf("%v", result.Scope))
+		scopeString := r.FindStringSubmatch(fmt.Sprintf("%v", result.Scope))[1]
+		// fmt.Println(scopeString)
+		c.Request().Header.Set(SCOPE_HEADER, fmt.Sprintf("%v", scopeString))
+		return next(c)
+	}
+}
 
-// 		r.Header.Set("BCD", "234")
-// 		fmt.Println(r.Header.Get("BCD"))
-// 		handler.ServeHTTP(w, r)
-
-// 		fmt.Println("middleware 2 writer")
-
-// 	})
-// }
+func (m *midware) CheckScopeFuncFactory(scope ...string) func(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			scopeString := c.Request().Header.Get(SCOPE_HEADER)
+			scopeArray := strings.Split(scopeString, " ")
+			scopeMap := make(map[string]bool, len(scopeArray))
+			for _, s := range scopeArray {
+				scopeMap[s] = true
+			}
+			for _, s := range scope {
+				if _, ok := scopeMap[s]; !ok {
+					return echo.NewHTTPError(http.StatusForbidden, "forbidden")
+				}
+			}
+			return next(c)
+		}
+	}
+}

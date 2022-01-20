@@ -3,6 +3,7 @@ package repo
 import (
 	"database/sql"
 	"fmt"
+	"log"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -18,7 +19,7 @@ type UserInfo struct {
 }
 
 type User interface {
-	CreateUser(userID string, userName string, userEmail string, password string) error
+	CreateUser(userID string, userName string, userEmail string, password string, scope []string) error
 	GetUserByID(userID string) (*UserInfo, error)
 	GetUserByName(userID string) (*UserInfo, error)
 	GetUserByEmail(userID string) (*UserInfo, error)
@@ -38,21 +39,48 @@ func NewUser(db *sql.DB) User {
 	}
 }
 
-func (u *user) CreateUser(userID string, userName string, userEmail string, password string) error {
-	_, err := u.db.Exec(
-		fmt.Sprintf(
-			`INSERT INTO %s (userID, name, email, password) VALUES (?, ?, ?,?)`,
-			tableName,
-		),
+func (u *user) CreateUser(userID string, userName string, userEmail string, password string, scope []string) error {
+	tx, err := u.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, execErr := tx.Exec(fmt.Sprintf(
+		`INSERT INTO %s (userID, name, email, password) VALUES (?, ?, ?,?)`,
+		tableName,
+	),
 		userID,
 		userName,
 		userEmail,
-		password,
-	)
+		password)
+	if execErr != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("repo.CreateUser: %s", execErr.Error())
+	}
+
+	for _, s := range scope {
+		_, execErr = tx.Exec(
+			fmt.Sprintf(
+				`INSERT INTO %s (userID, scope) VALUES (?, ?)`,
+				scopeTableName,
+			),
+			userID,
+			s,
+		)
+		if execErr != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("repo.CreateUser: %s", execErr.Error())
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("repo.CreateUser: %s", err.Error())
+	}
+
 	if err != nil {
 		// fmt.Println(err.Error())
 		return fmt.Errorf("repo.CreateUser: %s", err.Error())
 	}
+
 	return nil
 }
 
@@ -63,13 +91,13 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	// 		tableName,
 	// 	),
 	// 	userID)
-	// fmt.Println("repo.GetUserByID: ")
+	// fmt.Println("repo.GetUserByID: ", userID)
 	rows, err := u.db.Query(
 		fmt.Sprintf(
 			`SELECT userID, name, email, password, scope FROM 
 			(SELECT users.userID, users.name, users.email, users.password, user_scope.scope
 				FROM %s
-				INNER JOIN %s ON users.userID = user_scope.userID) WHERE userID = ?`,
+				LEFT JOIN %s ON users.userID = user_scope.userID) WHERE userID = ?`,
 			tableName,
 			scopeTableName,
 		),
@@ -83,26 +111,41 @@ func (u *user) GetUserByID(userID string) (*UserInfo, error) {
 	var scopeArray []string
 
 	defer rows.Close()
-	for rows.Next() {
-		var scopeRow string
+	var scopeNullString sql.NullString
+
+	if !rows.Next() {
+		return nil, fmt.Errorf("User Not Found")
+	} else {
 		err = rows.Scan(
 			&userResult.UserID,
 			&userResult.UserName,
 			&userResult.UserEmail,
 			&userResult.Password,
-			&scopeRow,
+			&scopeNullString,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("repo.GetUserByID: rows.Scan error: %s", err.Error())
 		}
-		if userResult.UserID == "" {
-			return nil, fmt.Errorf("User Not Found")
-		}
-		scopeArray = append(scopeArray, scopeRow)
+		scopeArray = append(scopeArray, scopeNullString.String)
 	}
-	userResult.Scope = scopeArray
+	for rows.Next() {
+		err = rows.Scan(
+			&userResult.UserID,
+			&userResult.UserName,
+			&userResult.UserEmail,
+			&userResult.Password,
+			&scopeNullString,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("repo.GetUserByID: rows.Scan error: %s", err.Error())
+		}
+		scopeArray = append(scopeArray, scopeNullString.String)
+	}
 
-	fmt.Println("repo.GetUserByID: ", userResult)
+	userResult.Scope = scopeArray
+	// fmt.Println("repo.GetUserByID: userResult.Scope: ", userResult.Scope)
+
+	// fmt.Println("repo.GetUserByID: ", userResult)
 	return userResult, nil
 }
 
@@ -165,11 +208,12 @@ func (u *user) List() ([]*UserInfo, error) {
 	var userList []*UserInfo
 	for rows.Next() {
 		userResult := &UserInfo{}
-		rows.Scan(&userResult.UserID, &userResult.UserEmail, &userResult.UserName)
+		rows.Scan(&userResult.UserID, &userResult.UserName, &userResult.UserEmail)
 		// fmt.Println(userResult.UserID)
 		// fmt.Println(userResult.UserName)
 		userList = append(userList, userResult)
 	}
+
 	return userList, nil
 }
 
@@ -213,6 +257,16 @@ func (u *user) DeleteUser(userID string) error {
 		fmt.Sprintf(
 			`DELETE FROM %s where userID=?`,
 			tableName,
+		),
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("repo.DeleteUser: %s", err.Error())
+	}
+	_, err = u.db.Exec(
+		fmt.Sprintf(
+			`DELETE FROM %s where userID=?`,
+			scopeTableName,
 		),
 		userID,
 	)
