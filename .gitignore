@@ -13,6 +13,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
-# user.db
+/db/user.db
 .vscode
 .DS_Store
+/build

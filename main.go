@@ -91,7 +91,9 @@ func main() {
 	public.POST("/login", endpoint.LogIn)
 	public.POST("/emaillogin", endpoint.EmailLogIn)
 
-	public.File("/", "./frontend/index.html")
+	public.File("/ui/*", "./build/index.html")
+	public.Static("/static", "./build/static")
+	public.Static("/manifest.json", "./build/asset-manifest.json")
 	public.POST("/login-form", endpoint.LoginForm)
 
 	// Start server
