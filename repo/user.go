@@ -198,7 +198,7 @@ func (u *user) GetUserByEmail(userEmail string) (*UserInfo, error) {
 func (u *user) List() ([]*UserInfo, error) {
 	rows, err := u.db.Query(
 		fmt.Sprintf(
-			`SELECT userID, email, name FROM %s`,
+			`SELECT userID, name, email FROM %s`,
 			tableName,
 		),
 	)

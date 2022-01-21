@@ -127,7 +127,8 @@ func (a *auth) RefreshToken(tokenString string) (string, error) {
 	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"userID": userID,
 		"scope":  scope.UserScope,
-		"exp":    time.Now().Add(time.Minute * 30).Unix(),
+		"exp":    time.Now().Add(time.Hour * 256).Unix(),
+		// "exp":    time.Now().Add(time.Minute * 30).Unix(),
 	})
 	newTokenString, err := newToken.SignedString(TokenKey)
 	if err != nil {

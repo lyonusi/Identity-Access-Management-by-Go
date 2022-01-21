@@ -25,7 +25,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	e := echo.New()
+	public := echo.New()
 
 	var redisClient *redis.Client
 	redisClient, err = repo.RedisClient()
@@ -43,8 +43,8 @@ func main() {
 	middlewares := middlewares.NewMidWare(authService)
 
 	// Echo instance
-	e.Use(middleware.CORS())
-	e.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+	public.Use(middleware.CORS())
+	public.Use(middleware.JWTWithConfig(middleware.JWTConfig{
 		Skipper: func(c echo.Context) bool {
 			return true
 		},
@@ -53,47 +53,49 @@ func main() {
 		// TokenLookup: "header:" + scopeHeader,
 	}))
 
-	m := e.Group("/read")
-	m.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("read"))
-	m.GET("/hello", endpoint.Hello)
+	readonly := public.Group("/user")
+	readonly.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("read"))
 
-	r := e.Group("/read-write")
-	r.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("read", "write"))
-	r.GET("/hello", endpoint.Hello)
+	// Routes - user
+	readonly.GET("/hello", endpoint.Hello)
+	readonly.GET("/getUserById", endpoint.GetUserById)
+	readonly.GET("/listuser", endpoint.List)
+	readonly.GET("/refreshtoken", endpoint.RefreshToken)
 
-	u := e.Group("/test")
+	u := public.Group("/test")
 	u.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("test"))
 	u.GET("/hello", endpoint.Hello)
 
-	g := e.Group("/admin")
-	g.Use(middleware.JWTWithConfig(middleware.JWTConfig{
-		SigningKey: []byte(service.TokenKey),
-		AuthScheme: "Bearer",
-		// TokenLookup: "header:" + scopeHeader,
-	}))
+	admin := public.Group("/admin")
+	admin.Use(middlewares.ValidateJWT, middlewares.CheckScopeFuncFactory("read", "write"))
+	// admin.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+	// 	SigningKey: []byte(service.TokenKey),
+	// 	AuthScheme: "Bearer",
+	// 	// TokenLookup: "header:" + scopeHeader,
+	// }),)
 
 	// Routes - admin
-	g.GET("/getUserById", endpoint.GetUserById)
-	g.POST("/createuser", endpoint.CreateUser)
-	g.GET("/listuser", endpoint.List)
-	g.POST("/update", endpoint.Update)
-	g.POST("/delete", endpoint.Delete)
-	g.GET("/refreshtoken", endpoint.RefreshToken)
-	g.POST("/setscope", endpoint.SetUserScope)
-	g.GET("/getscope", endpoint.GetUserScope)
-	g.GET("/listuserbyscope", endpoint.ListUserbyScope)
-	g.POST("/deleteuserscope", endpoint.DeleteUserScope)
+	admin.GET("/getUserById", endpoint.GetUserById)
+	admin.POST("/createuser", endpoint.CreateUser)
+	admin.GET("/listuser", endpoint.List)
+	admin.POST("/update", endpoint.Update)
+	admin.POST("/delete", endpoint.Delete)
+	admin.GET("/refreshtoken", endpoint.RefreshToken)
+	admin.POST("/setscope", endpoint.SetUserScope)
+	admin.GET("/getscope", endpoint.GetUserScope)
+	admin.GET("/listuserbyscope", endpoint.ListUserbyScope)
+	admin.POST("/deleteuserscope", endpoint.DeleteUserScope)
 
 	// Routes - public
-	// e.GET("/hello", endpoint.Hello)
-	e.POST("/login", endpoint.LogIn)
-	e.POST("/emaillogin", endpoint.EmailLogIn)
+	// public.GET("/hello", endpoint.Hello)
+	public.POST("/login", endpoint.LogIn)
+	public.POST("/emaillogin", endpoint.EmailLogIn)
 
-	e.File("/", "./frontend/index.html")
-	e.POST("/login-form", endpoint.LoginForm)
+	public.File("/", "./frontend/index.html")
+	public.POST("/login-form", endpoint.LoginForm)
 
 	// Start server
-	e.Logger.Fatal(e.Start(":1323"))
+	public.Logger.Fatal(public.Start(":1323"))
 }
 
 func dbInit() (*sql.DB, error) {

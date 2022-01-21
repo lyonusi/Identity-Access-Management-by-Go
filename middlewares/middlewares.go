@@ -37,7 +37,7 @@ func (m *midware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		token := c.Request().Header.Get("Authorization")
 		token = strings.ReplaceAll(token, "Bearer ", "")
-		fmt.Println("middleware get token = ", token)
+		// fmt.Println("middleware get token = ", token)
 		result, err := m.authService.Validate(token)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("Internal Error: %s", err.Error()))
