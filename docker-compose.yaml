@@ -1,0 +1,10 @@
+version: "3.3"
+services:
+    firebase-service:
+      restart: always
+      build: 
+        dockerfile: ./dockerfile
+      ports: 
+        - "1323:1323"
+      volumes:
+        - "./db:/db"

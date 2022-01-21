@@ -99,7 +99,7 @@ func main() {
 }
 
 func dbInit() (*sql.DB, error) {
-	database, err := sql.Open("sqlite3", "./user.db")
+	database, err := sql.Open("sqlite3", "./db/user.db")
 	if err != nil {
 		return nil, fmt.Errorf("main.dbInit %s", err.Error())
 	}
