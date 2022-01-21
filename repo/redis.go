@@ -12,7 +12,7 @@ var ctx = context.Background()
 
 func RedisClient() (*redis.Client, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "docker.for.mac.localhost:6379",
 	})
 
 	check, err := rdb.Ping(ctx).Result()
