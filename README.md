@@ -16,11 +16,13 @@ I did also wrote a simplest React frontend for it - the one repo called `IAM Cli
 ## Why Golang? ##
 In (my) layman's words - Go is very strict on types, and it provides very detailed, useful error information.
 
-As a beginner, these features are extremely helpful for me to understant how objects are passed from one another, their types, methods, interfaces, and I don't have to run the program only to know I have already made a mistake. 
+As a beginner, these features are extremely helpful for me to understand how objects are handled and passed from one another, their types, methods, interfaces...; and I don't have to run the program only to know I have already made a mistake. 
 
-And it was so much fun later when I played with goroutine and channels...
+Plus, it was so much fun later when I played with goroutine and channels...
 
 ## Fun Fact ##
 So many struggling nights and times and times of refactoring my own codes...
 And this is my **very first project** as I offically started to learn coding;
 And this is also **THE PROJECT** that I determined that this is something I would like to do everyday and as a career. **TOTALLY**.
+
+You may want to check this project out, a full-stack JavaScript Blog Platform: https://github.com/lyonusi/redwood-hello
