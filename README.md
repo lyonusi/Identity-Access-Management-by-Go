@@ -22,7 +22,9 @@ Plus, it was so much fun later when I played with goroutine and channels...
 
 ## Fun Fact ##
 So many struggling nights and times and times of refactoring my own codes...
+
 And this is my **very first project** as I offically started to learn coding;
+
 And this is also **THE PROJECT** that I determined that this is something I would like to do everyday and as a career. **TOTALLY**.
 
 You may want to check this project out, a full-stack JavaScript Blog Platform: https://github.com/lyonusi/redwood-hello
